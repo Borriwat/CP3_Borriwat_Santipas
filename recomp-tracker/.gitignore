@@ -1,0 +1,7 @@
+# Personal plan files hold member-only coaching content and body stats.
+# Never commit them: this repository is public.
+*.plan.json
+private/
+node_modules/
+test-results/
+screenshots/
