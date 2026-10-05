@@ -292,3 +292,21 @@ test('freezeDayTypes skips today, empty days and days with an explicit type', ()
   assert.equal(s.days[TODAY].type, undefined);
   assert.equal(s.days['2026-06-11'].type, 'cardio');
 });
+
+test('plan ids must be safe: no quotes, markup or prototype keys', () => {
+  const evil = ['x" onfocus="alert(1)', '<img src=x>', '__proto__', 'a b', '', 'ok id with spaces', 'constructor'];
+  for (const id of evil) {
+    const p = buildExamplePlan();
+    p.supplements[0].id = id;
+    const v = validatePlan(p);
+    assert.equal(v.ok, false, `supplement id ${JSON.stringify(id)} should be rejected`);
+    assert.match(v.errors.join(), /id/i);
+  }
+  const p = buildExamplePlan();
+  p.menus['A" onclick="x'] = p.menus.A;
+  assert.equal(validatePlan(p).ok, false);
+  const q = buildExamplePlan();
+  q.program.editions.gym.days.push[0].id = 'bad id';
+  assert.equal(validatePlan(q).ok, false);
+  assert.equal(validatePlan(buildExamplePlan()).ok, true, 'the normal example still passes');
+});

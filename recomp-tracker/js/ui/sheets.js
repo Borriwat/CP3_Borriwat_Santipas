@@ -84,7 +84,7 @@ function supplementsSheet() {
     body: html`<div class="stack">
       <p class="small muted">Tick what you actually take. These doses come from your plan; they are general guidelines, so check with a doctor or pharmacist if you have a medical condition or take medication.</p>
       ${groups.map(([k, g]) => html`<div><div class="tiny muted bold" style="text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px">${TIMINGS[k]}</div>
-        <div class="list">${g.map((x) => html`<div class="item" data-key="sp-${x.id}">${checkbox('supp-pick', `data-id="${x.id}"`, ids.has(x.id), x.name)}
+        <div class="list">${g.map((x) => html`<div class="item" data-key="sp-${x.id}">${checkbox('supp-pick', { id: x.id }, ids.has(x.id), x.name)}
           <div class="grow"><div class="title">${x.name}</div><div class="sub">${x.dose}${x.brand ? ' · ' + x.brand : ''}${x.note ? ' · ' + x.note : ''}</div></div></div>`)}</div></div>`)}
     </div>`,
     foot: html`<button class="btn primary" data-act="sheet-close">Done</button>`,

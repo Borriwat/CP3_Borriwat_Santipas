@@ -22,9 +22,15 @@ try {
 const { chromium, devices } = pw;
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
+// Serve under a sub-path, exactly like GitHub Pages does for a project site
+// (https://<user>.github.io/<repo>/recomp-tracker/). Anything that only works at
+// the server root (absolute URLs, a mis-scoped service worker) fails here.
+const PREFIX = '/CP3_Borriwat_Santipas/recomp-tracker/';
 const server = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const file = join(root, path === '/' ? 'index.html' : path);
+  if (!path.startsWith(PREFIX)) return res.writeHead(404).end('outside the app path');
+  const rel = path.slice(PREFIX.length) || 'index.html';
+  const file = join(root, rel);
   if (!file.startsWith(root)) return res.writeHead(403).end();
   try {
     const body = await readFile(file);
@@ -34,7 +40,7 @@ const server = createServer(async (req, res) => {
   }
 });
 await new Promise((r) => server.listen(0, r));
-const BASE = `http://localhost:${server.address().port}/`;
+const BASE = `http://localhost:${server.address().port}${PREFIX}`;
 
 let passed = 0;
 const failures = [];
@@ -45,7 +51,7 @@ async function check(name, fn) {
     console.log(`  ok   ${name}`);
   } catch (e) {
     failures.push(name);
-    console.log(`  FAIL ${name}\n       ${e.message.split('\n')[0]}`);
+    console.log(`  FAIL ${name}\n       ${e.message.split('\n').slice(0, 12).join('\n       ')}`);
   }
 }
 const eq = (a, b, msg = '') => {
@@ -492,6 +498,58 @@ console.log('\nWelcome paths');
     await c2.close();
   });
   await check('no console errors', async () => eq(page.errors.length, 0, page.errors.join('; ')));
+  await ctx.close();
+}
+
+
+console.log('\nHostile input');
+{
+  const { ctx, page } = await newPage();
+  await check('markup in a plan file is shown as text and never executed', async () => {
+    const { buildExamplePlan } = await import('../../js/data/example-plan.js');
+    const p = buildExamplePlan();
+    p.name = '<img src=x onerror="window.__xss=1">Evil plan';
+    p.supplements[0].name = '"><script>window.__xss=2</script>';
+    p.supplements[0].note = '<b onmouseover="window.__xss=3">hi</b>';
+    p.menus.A.label = '<svg onload="window.__xss=4">';
+    p.program.days.push.label = '</div><img src=x onerror="window.__xss=5">';
+    await page.goto(BASE);
+    await page.click('[data-act="plan-import-open"]');
+    await page.fill('textarea[data-field="text"]', JSON.stringify(p));
+    await page.click('[data-act="plan-import"]');
+    await page.waitForSelector('.tabbar');
+    for (const tab of ['today', 'plan', 'train', 'more']) {
+      await page.click(`[data-act="tab"][data-v="${tab}"]`);
+      await page.waitForTimeout(100);
+    }
+    ok((await page.locator('main').innerText()).includes('<img src=x'), 'name should appear literally');
+    await page.click('[data-act="supp-choose"]'); // the supplement list shows the hostile name too
+    await page.waitForSelector('.sheet');
+    ok((await page.locator('.sheet').innerText()).includes('<script>window.__xss=2</script>'), 'supplement name should appear literally');
+    await page.waitForTimeout(150);
+    eq(await page.evaluate(() => window.__xss), undefined, 'injected script ran');
+    eq(await page.locator('img[src="x"]').count(), 0, 'injected element exists');
+    await page.click('.sheet-foot [data-act="sheet-close"]');
+    // long unbroken text must wrap instead of widening the page (that hides the tab bar)
+    for (const tab of ['today', 'plan', 'train', 'progress', 'more']) {
+      await page.click(`[data-act="tab"][data-v="${tab}"]`);
+      await page.waitForTimeout(80);
+      const o = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }));
+      ok(o.sw <= o.cw, `${tab}: page is ${o.sw}px wide on a ${o.cw}px screen`);
+    }
+  });
+  await check('a plan with an attribute-breaking id is refused with a clear message', async () => {
+    const { buildExamplePlan } = await import('../../js/data/example-plan.js');
+    const p = buildExamplePlan();
+    p.supplements[0].id = 'x" data-act="reset-all';
+    await page.click('[data-act="tab"][data-v="more"]');
+    await page.click('[data-act="reset-all"]');
+    await page.click('[data-act="confirm-yes"]');
+    await page.waitForSelector('[data-act="plan-import-open"]');
+    await page.click('[data-act="plan-import-open"]');
+    await page.fill('textarea[data-field="text"]', JSON.stringify(p));
+    ok((await page.locator('.banner.bad').innerText()).includes('not a valid id'));
+  });
   await ctx.close();
 }
 

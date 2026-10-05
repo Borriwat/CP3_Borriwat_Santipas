@@ -96,6 +96,12 @@ body {
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  /* user and plan text can contain long unbroken strings: wrap, never widen the page */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+html {
+  touch-action: manipulation; /* no double-tap zoom */
 }
 body.locked {
   overflow: hidden;
@@ -169,7 +175,18 @@ a {
 
 /* ---------- Shell ---------- */
 #app {
+  min-height: 100vh;
   min-height: 100dvh;
+}
+/* flex children must be allowed to shrink below their content for wrapping to work */
+.page-head > div,
+.daynav h1,
+.meal-title > h3,
+.card-head > h2,
+.ex-head > div,
+.item > div,
+.row > div {
+  min-width: 0;
 }
 .screen {
   max-width: 560px;
@@ -230,6 +247,7 @@ a {
   display: flex;
   justify-content: center;
   padding-bottom: var(--safe-b);
+  background: var(--card);
   background: color-mix(in srgb, var(--card) 88%, transparent);
   -webkit-backdrop-filter: saturate(1.6) blur(14px);
   backdrop-filter: saturate(1.6) blur(14px);
@@ -990,6 +1008,7 @@ button.item {
 }
 
 .welcome {
+  min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;

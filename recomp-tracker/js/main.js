@@ -1,3 +1,4 @@
+import './core/polyfills.js';
 import { createStore } from './core/store.js';
 import { createStorage, requestPersistence } from './core/storage.js';
 import { morph, html } from './ui/dom.js';

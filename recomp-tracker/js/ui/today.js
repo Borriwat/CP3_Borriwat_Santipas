@@ -45,7 +45,7 @@ function dayNav(m) {
 function typeSwitcher(m) {
   const opts = DAY_TYPES.map((t) => [t, DAY_TYPE_SHORT[t]]);
   return html`<div style="margin-bottom:12px">
-    ${seg('set-type', opts, m.type, '', 'tight')}
+    ${seg('set-type', opts, m.type, 'tight')}
     <p class="tiny muted center" style="margin-top:6px">${m.explicitType ? 'Set by you.' : 'Chosen from your schedule and what you log.'} Targets follow the day type.</p>
   </div>`;
 }
@@ -186,7 +186,7 @@ function suppCard(m) {
     <div class="meal-title"><h3>Supplements</h3>${list.length ? html`<span class="pill ${done === list.length ? 'ok' : ''}">${done}/${list.length}</span>` : ''}</div>
     ${list.length
       ? groups.map(([k, g]) => html`<div class="tiny muted bold" style="margin:10px 0 2px;text-transform:uppercase;letter-spacing:.04em">${TIMINGS[k]}</div>
-        <div class="list">${g.map((x) => html`<div class="item" data-key="s-${x.id}">${checkbox('supp-toggle', `data-id="${x.id}"`, taken.has(x.id), x.name)}
+        <div class="list">${g.map((x) => html`<div class="item" data-key="s-${x.id}">${checkbox('supp-toggle', { id: x.id }, taken.has(x.id), x.name)}
           <div class="grow"><div class="title">${x.name}</div><div class="sub">${x.dose}${x.brand ? ' · ' + x.brand : ''}</div></div></div>`)}</div>`)
       : html`<p class="small muted" style="margin-top:4px">${m.plan.supplements.length ? 'Pick the supplements you take and tick them off each day.' : 'Your plan has no supplements. You can still track daily habits in notes.'}</p>`}
     ${m.plan.supplements.length ? html`<div style="margin-top:10px"><button class="btn sm block" data-act="supp-choose">Choose my supplements</button></div>` : ''}

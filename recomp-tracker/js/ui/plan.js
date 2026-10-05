@@ -48,7 +48,7 @@ export function renderPlan() {
     <div class="page-head"><div><h1>Plan</h1><div class="small muted">${plan.name}</div></div><button class="btn sm" data-act="targets-open">Edit targets</button></div>
     <div class="stack">
       ${menuIds.length > 1 ? seg('plan-menu', menuIds.map((id) => [id, plan.menus[id].label]), s.prefs.menu) : ''}
-      ${seg('plan-type', DAY_TYPES.map((t) => [t, DAY_TYPE_SHORT[t]]), type, '', 'tight')}
+      ${seg('plan-type', DAY_TYPES.map((t) => [t, DAY_TYPE_SHORT[t]]), type, 'tight')}
       <div class="card"><div class="row between"><div><div class="small muted bold">${DAY_TYPE_LABEL[type]} day target</div><div style="font-size:24px;font-weight:700">${n0(tg.kcal)} <span class="muted small">kcal</span></div></div>${macroLine({ ...tg })}</div></div>
       ${stale.length ? html`<div class="banner">${icon('alert')}<div class="grow"><b>This menu is sized for older targets.</b>
         <div class="small">${stale.map((x) => `${DAY_TYPE_LABEL[x.dt]}: menu ${n0(x.menu.kcal)} vs target ${n0(x.target.kcal)} kcal`).join(' · ')}</div>

@@ -15,7 +15,7 @@ export function installHint() {
     /* ignore */
   }
   if (standalone || dismissed || !ios) return '';
-  return html`<div class="banner info" style="margin:0 0 12px">${icon('download')}<div class="grow"><b>Install on your iPhone.</b> In Safari tap <b>Share</b>, then <b>Add to Home Screen</b>. It opens full-screen and works offline.
+  return html`<div class="banner info" style="margin:0 0 12px">${icon('download')}<div class="grow"><b>Install first.</b> In Safari tap <b>Share</b>, then <b>Add to Home Screen</b>, and open the app from the new icon <b>before</b> importing your plan. The installed app keeps its own storage, separate from Safari.
     <div><button class="btn sm ghost" style="padding:0" data-act="install-dismiss">Got it</button></div></div></div>`;
 }
 

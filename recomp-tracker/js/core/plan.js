@@ -30,6 +30,11 @@ export const TIMINGS = {
 
 const isNum = (n) => typeof n === 'number' && Number.isFinite(n);
 
+// Identifiers end up in attributes, keys and lookups, so keep them boring.
+export const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
+const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+export const isSafeId = (s) => typeof s === 'string' && SAFE_ID.test(s) && !FORBIDDEN_KEYS.has(s);
+
 export function validatePlan(input) {
   // Work on a private copy: the result never aliases (or modifies) the caller's object.
   const raw = input && typeof input === 'object' ? structuredClone(input) : input;
@@ -102,6 +107,21 @@ export function validatePlan(input) {
         const off = Math.abs(total.kcal - tg.kcal) / tg.kcal;
         if (off > 0.05) warn(`Menu ${mid}/${dt}: ${Math.round(total.kcal)} kcal vs target ${tg.kcal} (${Math.round(off * 100)}% off).`);
       }
+    }
+  }
+
+  // identifiers
+  const badId = (what, id) => err(`${what} "${String(id).slice(0, 30)}" is not a valid id (use letters, numbers, - _ . and at most 64 characters).`);
+  for (const f of plan.foods) if (f.id && !isSafeId(f.id)) badId('Food id', f.id);
+  for (const id of Object.keys(plan.menus)) if (!isSafeId(id)) badId('Menu id', id);
+  for (const id of Object.keys(plan.slots)) if (!isSafeId(id)) badId('Meal slot', id);
+  for (const t of Object.values(plan.dayTypes)) for (const sl of t.slots) if (!isSafeId(sl)) badId('Meal slot', sl);
+  for (const s of plan.supplements) if (s.id && !isSafeId(s.id)) badId('Supplement id', s.id);
+  if (plan.program) {
+    for (const k of plan.program.cycle || []) if (!isSafeId(k)) badId('Program day', k);
+    for (const [eid, ed] of Object.entries(plan.program.editions || {})) {
+      if (!isSafeId(eid)) badId('Edition id', eid);
+      for (const exs of Object.values(ed.days || {})) for (const ex of exs) if (ex.id && !isSafeId(ex.id)) badId('Exercise id', ex.id);
     }
   }
 

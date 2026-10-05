@@ -1,4 +1,4 @@
-import { html, raw } from './dom.js';
+import { html, raw, esc } from './dom.js';
 import { n0, n1, pct } from '../core/format.js';
 import { shortDate, diffDays } from '../core/dates.js';
 
@@ -67,14 +67,15 @@ export function macroRow(key, name, eaten, target) {
 export const macroLine = (m) =>
   html`<div class="macro-line"><span class="mc-p">P ${n0(m.p)}</span><span class="mc-c">C ${n0(m.c)}</span><span class="mc-f">F ${n0(m.f)}</span><span class="muted">${n0(m.kcal)} kcal</span></div>`;
 
-export const seg = (act, options, current, extra = '', cls = '') =>
-  html`<div class="seg ${cls}" role="group">${options.map(([v, label]) => html`<button type="button" data-act="${act}" data-v="${v}" ${raw(extra)} aria-pressed="${String(v === current)}">${label}</button>`)}</div>`;
+export const seg = (act, options, current, cls = '') =>
+  html`<div class="seg ${cls}" role="group">${options.map(([v, label]) => html`<button type="button" data-act="${act}" data-v="${v}" aria-pressed="${String(v === current)}">${label}</button>`)}</div>`;
 
-export const chip = (act, v, label, on, extra = '') =>
-  html`<button type="button" class="chip" data-act="${act}" data-v="${v}" ${raw(extra)} aria-pressed="${String(!!on)}">${label}</button>`;
+export const chip = (act, v, label, on) =>
+  html`<button type="button" class="chip" data-act="${act}" data-v="${v}" aria-pressed="${String(!!on)}">${label}</button>`;
 
-export const checkbox = (act, attrs, on, label) =>
-  html`<button type="button" class="check" data-act="${act}" ${raw(attrs)} aria-pressed="${String(!!on)}" aria-label="${label}">${icon('check')}</button>`;
+// `data` is an object of data-* attributes; every value is escaped.
+export const checkbox = (act, data, on, label) =>
+  raw(`<button type="button" class="check" data-act="${esc(act)}" ${Object.entries(data || {}).map(([k, v]) => `data-${esc(k)}="${esc(v)}"`).join(' ')} aria-pressed="${on ? 'true' : 'false'}" aria-label="${esc(label)}">${icon('check')}</button>`);
 
 export const banner = (kind, ic, content) => html`<div class="banner ${kind}" role="note">${icon(ic)}<div class="grow">${content}</div></div>`;
 
