@@ -6,6 +6,7 @@ import { DAY_TYPES, DAY_TYPE_SHORT } from '../core/tdee.js';
 import { TIMINGS } from '../core/plan.js';
 import { n0, n1, qtyText, signed, parseNum } from '../core/format.js';
 import { entryMacros, diff } from '../core/macros.js';
+import { rebalanceMeals } from '../core/scale.js';
 import { sessionVolume } from '../core/stats.js';
 import * as S from '../core/state.js';
 
@@ -71,14 +72,27 @@ function summaryCard(m) {
   </section>`;
 }
 
-// Should we offer to re-split what's left of the day? Only when it matters.
+// Should we offer to re-split what's left of the day? Only when the open meals no
+// longer fit what's left AND resizing them would actually change something. (If the
+// foods can't get closer, e.g. fat is already over, offering it again is just noise.)
 export function rebalanceNeeded(m) {
   const open = m.meals.filter((x) => x.status === 'open' && x.items.length);
   if (!open.length || !m.meals.some((x) => x.status === 'logged') || !m.remaining) return null;
   const openPlanned = itemsMacros(open.flatMap((x) => x.items), m.index);
   const d = diff(m.remaining, openPlanned);
-  if (Math.abs(d.kcal) >= 100 || Math.abs(d.p) >= 10) return { delta: d, open };
-  return null;
+  if (Math.abs(d.kcal) < 100 && Math.abs(d.p) < 10) return null;
+  const res = rebalanceMeals(m.remaining, open.map((x) => ({ slot: x.slot, items: x.items })), m.index);
+  const changes = res.meals.some((mm) => {
+    const meal = open.find((x) => x.slot === mm.slot);
+    const before = new Map(meal.items.map((i) => [i.foodId, i.qty]));
+    const after = new Map(mm.scaled.items.map((i) => [i.foodId, i.qty]));
+    return [...before.keys()].some((id) => {
+      const a = before.get(id);
+      const b = after.get(id) ?? 0;
+      return Math.abs(b - a) >= Math.max(5, a * 0.05);
+    });
+  });
+  return changes ? { delta: d, open } : null;
 }
 
 function rebalanceBanner(m) {

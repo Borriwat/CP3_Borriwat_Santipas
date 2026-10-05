@@ -4,7 +4,7 @@ import { buildExamplePlan } from '../js/data/example-plan.js';
 import { validatePlan, PLAN_SCHEMA, targetsOn, menuDayTotals, basicPlan } from '../js/core/plan.js';
 import { calculate } from '../js/core/tdee.js';
 import { buildFoodIndex } from '../js/core/foods.js';
-import { cycleIndex, programDayKey, anchorForDay, resolveDayType, withCardio, withLift } from '../js/core/schedule.js';
+import { cycleIndex, programDayKey, anchorForDay, resolveDayType, withCardio, withLift, freezeDayTypes } from '../js/core/schedule.js';
 import * as S from '../js/core/state.js';
 import { dayTotals, dayStatus } from '../js/core/stats.js';
 import { freshState, indexOf, logPerfectDay, logLift, TODAY } from './helpers.mjs';
@@ -255,4 +255,40 @@ test('regression: editing the weight alone keeps the body-fat reading', () => {
 test('withCardio / withLift upgrade a hand-picked day type', () => {
   assert.deepEqual(['rest', 'lift', 'cardio', 'lift_cardio'].map(withCardio), ['cardio', 'lift_cardio', 'cardio', 'lift_cardio']);
   assert.deepEqual(['rest', 'lift', 'cardio', 'lift_cardio'].map(withLift), ['lift', 'lift', 'lift_cardio', 'lift_cardio']);
+});
+
+test('cardio on a scheduled lifting day is Lift + Cardio, even before you have lifted', () => {
+  const s = freshState();
+  assert.equal(resolveDayType(s, TODAY, TODAY), 'lift');
+  S.addCardio(s, TODAY, { kind: 'Run', min: 30, kcal: 300 });
+  assert.equal(resolveDayType(s, TODAY, TODAY), 'lift_cardio');
+  const rest = '2026-06-18'; // a rest day in the cycle
+  S.addCardio(s, rest, { kind: 'Walk', min: 30, kcal: 120 });
+  assert.equal(resolveDayType(s, rest, TODAY), 'cardio', 'rest day + cardio is a cardio day');
+});
+
+test('past days never read the schedule, so shifting the schedule cannot rewrite them', () => {
+  const s = freshState();
+  const past = '2026-06-12'; // before TODAY; the cycle says lift (day index 4 = upper)
+  logPerfectDay(s, past, past); // food only, no workout, no explicit type yet
+  delete s.days[past].type;
+  assert.equal(resolveDayType(s, past, TODAY), 'rest', 'unfrozen past day falls back to what was logged');
+  assert.equal(freezeDayTypes(s, TODAY), 1);
+  const frozen = s.days[past].type;
+  assert.equal(frozen, 'lift', 'frozen using the schedule that was in force when the day ended');
+  S.setProgramDay(s, TODAY, 4); // shift the schedule
+  assert.equal(resolveDayType(s, past, TODAY), frozen, 'frozen day is unchanged by the shift');
+  assert.equal(freezeDayTypes(s, TODAY), 0, 'idempotent');
+});
+
+test('freezeDayTypes skips today, empty days and days with an explicit type', () => {
+  const s = freshState();
+  logPerfectDay(s, TODAY);
+  delete s.days[TODAY].type;
+  S.addWater(s, '2026-06-10', 500); // water only: not a tracked day
+  S.setDayType(s, '2026-06-11', 'cardio');
+  S.addQuickEntry(s, '2026-06-11', { name: 'x', p: 1 }, 'extra');
+  assert.equal(freezeDayTypes(s, TODAY), 0);
+  assert.equal(s.days[TODAY].type, undefined);
+  assert.equal(s.days['2026-06-11'].type, 'cardio');
 });

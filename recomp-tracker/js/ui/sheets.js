@@ -1,5 +1,5 @@
 import { html, raw } from './dom.js';
-import { icon, seg, chip, checkbox, banner } from './components.js';
+import { icon, seg, chip, checkbox, banner, girthClass } from './components.js';
 import { ui, getStore, todayISO, latestWeight } from './ctx.js';
 import { addFoodSheet, entrySheet, plannedItemSheet, swapSheet, rebalanceSheet, promptSheet } from './sheets-food.js';
 import { pickSessionSheet } from './train.js';
@@ -246,7 +246,7 @@ function reviewSheet(sh) {
   const cell = (v, dp = 1, suffix = '') => (v == null ? '–' : `${(Math.round(v * 10 ** dp) / 10 ** dp).toFixed(dp)}${suffix}`);
   const g = (k, label) => {
     const x = r.body[k];
-    return x.state === 'ok' ? html`<tr><td>${label}</td><td>${x.base}</td><td>${x.latest}</td><td class="${x.delta < 0 ? 'down' : x.delta > 0 ? 'up' : ''}">${signed(x.delta, 1)}</td></tr>` : '';
+    return x.state === 'ok' ? html`<tr><td>${label}</td><td>${x.base}</td><td>${x.latest}</td><td class="${girthClass(k, x.delta)}">${signed(x.delta, 1)}</td></tr>` : '';
   };
   const measuresShown = ['waist', 'hip', 'chest', 'thigh', 'arm'].some((k) => r.body[k].state === 'ok');
   const prevReview = s.reviews.find((x) => x.date === end);

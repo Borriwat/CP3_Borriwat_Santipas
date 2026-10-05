@@ -26,21 +26,43 @@ export function anchorForDay(date, n, length) {
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-// Which of the four day types applies to a date?
-//   1. what you explicitly chose, else
-//   2. what you actually did (workout / cardio logged), else
-//   3. what the program says for that date (today and future only), else rest.
-export function resolveDayType(state, date, today) {
+const hasLift = (day) => !!(day?.workout && (day.workout.finishedAt || day.workout.exercises?.some((e) => e.sets.some((s) => s.done))));
+
+export function scheduledLift(state, date) {
+  const key = state.plan?.program ? programDayKey(state.plan, date, state.prefs.programAnchor) : null;
+  return !!key && state.plan.program.days[key].dayType === 'lift';
+}
+
+function resolve(state, date, useSchedule) {
   const day = state.days[date];
   if (day?.type && DAY_TYPES.includes(day.type)) return day.type;
-  const lifted = !!(day?.workout && (day.workout.finishedAt || day.workout.exercises?.some((e) => e.sets.some((s) => s.done))));
+  const lift = hasLift(day) || (useSchedule && scheduledLift(state, date));
   const cardio = !!day?.cardio?.length;
-  if (lifted || cardio) return lifted && cardio ? 'lift_cardio' : lifted ? 'lift' : 'cardio';
-  if (date >= today && state.plan?.program) {
-    const key = programDayKey(state.plan, date, state.prefs.programAnchor);
-    if (key && state.plan.program.days[key].dayType === 'lift') return 'lift';
+  return lift && cardio ? 'lift_cardio' : lift ? 'lift' : cardio ? 'cardio' : 'rest';
+}
+
+// Which of the four day types applies to a date?
+//   1. what you explicitly chose, else
+//   2. what you did (workout / cardio logged) combined with, for today and
+//      the future, what your program schedules (so morning cardio on a lifting
+//      day is Lift + Cardio, not Cardio), else rest.
+// Past days never read the schedule: moving the schedule later must not
+// rewrite old days. See freezeDayTypes.
+export function resolveDayType(state, date, today) {
+  return resolve(state, date, date >= today);
+}
+
+// Once a day is over, pin its type so later schedule changes can't alter it.
+// Run on startup and when the date rolls over. Returns how many days it pinned.
+export function freezeDayTypes(state, today) {
+  let n = 0;
+  for (const [date, day] of Object.entries(state.days)) {
+    if (date >= today || day.type) continue;
+    if (!(day.entries?.length || day.workout || day.cardio?.length)) continue;
+    day.type = resolve(state, date, true);
+    n++;
   }
-  return 'rest';
+  return n;
 }
 
 // If the day type was chosen by hand, doing extra training should upgrade it

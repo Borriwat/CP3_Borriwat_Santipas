@@ -1,5 +1,5 @@
 import { html } from './dom.js';
-import { icon, seg, lineChart, barChart } from './components.js';
+import { icon, seg, lineChart, barChart, girthClass } from './components.js';
 import { ui, mutate, openSheet, render, getStore, todayISO } from './ctx.js';
 import { addDays, dateRange, diffDays, prettyDate, shortDate } from '../core/dates.js';
 import { weekWeightStats, weightSeries, movingAverage, dayStatus, exerciseVolume, sessionHasData, cardioKcalBetween } from '../core/stats.js';
@@ -66,7 +66,7 @@ function measurementsCard(s) {
         ${keys.filter(([k]) => latest[k]).map(([k, label]) => {
           const p = list.slice(0, -1).reverse().find((m) => m[k]);
           const d = p ? latest[k] - p[k] : null;
-          return html`<tr><td>${label}</td><td>${n1(latest[k])} cm</td>${prev ? html`<td class="${d < 0 ? 'down' : d > 0 ? 'up' : ''}">${d == null ? '–' : signed(d, 1)}</td>` : ''}</tr>`;
+          return html`<tr><td>${label}</td><td>${n1(latest[k])} cm</td>${prev ? html`<td class="${d == null ? '' : girthClass(k, d)}">${d == null ? '–' : signed(d, 1)}</td>` : ''}</tr>`;
         })}</tbody></table>
         <div class="list" style="margin-top:8px">${[...list].reverse().slice(0, 4).map((m) => html`<div class="item" data-key="m-${m.id}"><div class="grow"><div class="sub">${shortDate(m.date)} · ${keys.filter(([k]) => m[k]).map(([k]) => `${k} ${n1(m[k])}`).join(' · ')}</div></div><button class="btn icon sm ghost" data-act="measure-del" data-id="${m.id}" aria-label="Delete">${icon('trash')}</button></div>`)}</div>`
       : html`<p class="small muted">Waist and hips can drop even when the scale doesn't move, which is exactly what a recomp looks like. Measure every week or two.</p>`}

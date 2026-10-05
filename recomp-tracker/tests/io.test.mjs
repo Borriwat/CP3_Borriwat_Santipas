@@ -132,3 +132,14 @@ test('parseNum handles comma decimals, blanks and junk', async () => {
   assert.ok(Number.isNaN(parseNum(null)));
   assert.equal(parseNum(0), 0);
 });
+
+test('store: restoring a backup pins the types of its past days', async () => {
+  const { freshState, logPerfectDay } = await import('./helpers.mjs');
+  const s = freshState('2026-06-15');
+  logPerfectDay(s, '2026-06-12', '2026-06-12');
+  delete s.days['2026-06-12'].type;
+  const store = createStore(memoryStorage(), { today: () => '2026-06-15' });
+  await store.init();
+  store.replace(s);
+  assert.ok(store.state.days['2026-06-12'].type, 'type was pinned on restore');
+});

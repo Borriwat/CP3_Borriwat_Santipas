@@ -111,7 +111,10 @@ function wireEvents() {
   });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') getStore().flush();
-    else render();
+    else {
+      getStore().rollover();
+      render();
+    }
   });
   window.addEventListener('pagehide', () => getStore().flush());
 }

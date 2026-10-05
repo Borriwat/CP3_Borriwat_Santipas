@@ -8,7 +8,7 @@ import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
-import { buildHistory } from './make-history.mjs';
+import { buildHistory, buildStalledHistory } from './make-history.mjs';
 import { exportState } from '../../js/core/state.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -65,6 +65,7 @@ const newPage = async (opts = {}) => {
   return { ctx, page };
 };
 const kcalEaten = async (page) => Number((await page.locator('.card [aria-label$="kilocalories"]').first().getAttribute('aria-label')).match(/^(\d+)/)[1]);
+const kcalTarget = async (page) => Number((await page.locator('.ring-wrap').first().getAttribute('aria-label')).match(/of (\d+)/)[1]);
 const state = (page) => page.evaluate(() => JSON.parse(JSON.stringify(window.__app.store.state)));
 const loadExample = async (page) => {
   await page.goto(BASE);
@@ -300,6 +301,197 @@ for (const [name, profile] of [['iPhone SE (320 px)', 'iPhone SE'], ['iPhone 13'
     const [r, g, b] = bg.match(/\d+/g).map(Number);
     ok(r + g + b < 120, `background ${bg} is not dark`);
   });
+  await ctx.close();
+}
+
+
+console.log('\nMore flows');
+{
+  const { ctx, page } = await newPage();
+  await loadExample(page);
+  const today = async () => {
+    const st = await state(page);
+    return { st, day: Object.values(st.days)[0] || {} };
+  };
+  const restore = async (st) => {
+    const dir = await mkdtemp(join(tmpdir(), 'rt-'));
+    const f = join(dir, 'b.json');
+    await writeFile(f, exportState(st));
+    await page.click('[data-act="tab"][data-v="more"]');
+    await page.setInputFiles('[data-change="backup-file"]', f);
+    await page.click('[data-act="confirm-yes"]');
+    await page.waitForTimeout(250);
+  };
+
+  await check('logging cardio on a lift day switches the targets to Lift + Cardio', async () => {
+    const before = await kcalTarget(page);
+    await page.click('[data-act="cardio-open"]');
+    await page.click('[data-act="cardio-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq(await page.locator('.seg.tight button[aria-pressed="true"]').first().innerText(), 'Lift+Cardio');
+    ok((await kcalTarget(page)) > before, 'target did not grow');
+    const { day } = await today();
+    eq(day.cardio.length, 1);
+    ok(day.cardio[0].kcal > 150, `auto kcal ${day.cardio[0].kcal}`);
+  });
+  await check('a hand-picked Rest day is upgraded to Cardio when cardio is logged', async () => {
+    await page.click('[data-act="cardio-del"]');
+    await page.click('[data-act="set-type"][data-v="rest"]');
+    await page.click('[data-act="cardio-open"]');
+    await page.click('[data-act="cardio-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq(await page.locator('.seg.tight button[aria-pressed="true"]').first().innerText(), 'Cardio');
+  });
+  await check('measurements save and show a change against the previous entry', async () => {
+    await page.click('[data-act="tab"][data-v="progress"]');
+    for (const [date, waist] of [['2026-01-01', '84'], [null, '82.5']]) {
+      await page.click('[data-act="measure-open"]');
+      if (date) await page.fill('.sheet input[type="date"]', date);
+      await page.fill('input[data-input="measure-field"][data-k="waist"]', waist);
+      await page.click('[data-act="measure-save"]');
+      await page.waitForFunction(() => !document.querySelector('.sheet'));
+    }
+    eq((await state(page)).measurements.length, 2);
+    ok((await page.locator('table.t').first().innerText()).includes('−1.5'), 'delta not shown');
+  });
+  await check('editing targets applies from today and moves the ring', async () => {
+    await page.click('[data-act="tab"][data-v="plan"]');
+    await page.click('[data-act="targets-open"]');
+    const c = page.locator('input[data-input="target-field"][data-t="lift"][data-k="c"]');
+    const old = Number(await c.inputValue());
+    await c.fill(String(old + 10));
+    await page.click('[data-act="targets-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    const h = (await state(page)).targetHistory;
+    eq(h.length, 2);
+    eq(h[1].targets.lift.c, old + 10);
+    eq(h[0].targets.lift.c, old, 'old targets must be preserved');
+  });
+  await check('the supplement chooser changes which supplements appear', async () => {
+    await page.click('[data-act="tab"][data-v="more"]');
+    await page.click('[data-act="supp-choose"]');
+    const before = (await state(page)).prefs.supplementIds.length;
+    await page.click('[data-act="supp-pick"] >> nth=3'); // an optional one
+    await page.click('.sheet-foot [data-act="sheet-close"]');
+    eq((await state(page)).prefs.supplementIds.length, before + 1);
+  });
+  await check('"Which day is today?" moves the schedule', async () => {
+    await page.click('[data-act="tab"][data-v="train"]');
+    await page.click('[data-act="program-open"]');
+    await page.click('[data-act="program-set"][data-n="3"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq((await page.locator('.page-head h1').innerText()).trim(), 'Legs');
+    await page.click('[data-act="session-pick"]');
+    await page.click('[data-act="session-start"][data-k="pull"]');
+    await page.waitForSelector('.set-grid');
+    eq((await state(page)).days[Object.keys((await state(page)).days)[0]].workout.dayKey, 'pull');
+    await page.click('[data-act="workout-cancel"]');
+    await page.click('[data-act="confirm-yes"]');
+  });
+  await check('swapping a planned ingredient adjusts that meal for today only', async () => {
+    await page.click('[data-act="tab"][data-v="today"]');
+    await page.click('[data-act="set-type"][data-v="lift"]');
+    await page.click('[data-key="meal-dinner"] [data-act="planned-item"] >> nth=0');
+    await page.click('[data-act="planned-swap"]');
+    await page.click('[data-act="swap-pick"] >> nth=0');
+    await page.click('[data-act="swap-apply"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    ok((await page.locator('[data-key="meal-dinner"] .pill.warn').count()) === 1, 'no "Adjusted today" pill');
+    const { st, day } = await today();
+    ok(day.adjust.dinner.length >= 2);
+    ok(JSON.stringify(st.plan.menus.A.days.lift.dinner).includes('"q"'), 'plan itself untouched');
+    await page.click('[data-key="meal-dinner"] [data-act="reset-adjust"]');
+    eq(Object.keys((await today()).day.adjust).includes('dinner'), false);
+  });
+  await check('an off-plan meal triggers the rebalance offer and applying it resizes the rest', async () => {
+    await page.click('[data-key="meal-lunch"] [data-act="add-food"]');
+    await page.click('[data-act="sheet-tab"][data-v="quick"]');
+    await page.fill('input[data-field="quick.name"]', 'Big restaurant lunch');
+    await page.fill('input[data-field="quick.p"]', '30');
+    await page.fill('input[data-field="quick.c"]', '150');
+    await page.fill('input[data-field="quick.f"]', '60');
+    await page.click('[data-act="quick-add"]');
+    await page.waitForSelector('[data-act="rebalance-open"]');
+    await page.click('[data-act="rebalance-open"]');
+    await page.click('[data-act="rebalance-apply"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    const { day } = await today();
+    ok(Object.keys(day.adjust).length >= 2, 'no adjusted meals');
+    const carbs = (slot) => day.adjust[slot].reduce((a, i) => a + i.qty, 0);
+    ok(carbs('dinner') > 0);
+    eq(await page.locator('[data-act="rebalance-open"]').count(), 0, 'offer should disappear once rebalanced');
+  });
+  await check('review says NEXT, applying it lowers carbs, the menu goes stale, resizing fixes it', async () => {
+    await restore(buildStalledHistory());
+    await page.click('[data-act="tab"][data-v="progress"]');
+    await page.click('[data-act="review-open"]');
+    await page.waitForSelector('.sheet');
+    ok((await page.locator('.sheet').innerText()).includes('Next: take the next step'), 'expected NEXT');
+    await page.click('[data-act="review-apply"]');
+    await page.click('[data-act="confirm-yes"]');
+    await page.waitForSelector('.sheet [data-act="review-apply"][disabled]');
+    const h = (await state(page)).targetHistory;
+    eq(h.length, 2);
+    eq(h[0].targets.lift.c - h[1].targets.lift.c, 25);
+    eq(h[0].targets.rest.c - h[1].targets.rest.c, 0);
+    await page.click('.sheet-foot [data-act="sheet-close"]');
+    await page.click('[data-act="tab"][data-v="plan"]');
+    await page.waitForSelector('[data-act="menu-rescale"]');
+    await page.click('[data-act="menu-rescale"]');
+    await page.click('[data-act="confirm-yes"]');
+    await page.waitForFunction(() => !document.querySelector('[data-act="menu-rescale"]'));
+  });
+  await check('the calculator updates targets and the review floor values', async () => {
+    await page.click('[data-act="tab"][data-v="more"]');
+    await page.click('[data-act="calc-open"]');
+    await page.click('[data-act="calc-apply"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    const st = await state(page);
+    // same-day edits replace the earlier entry, so the review's change and this one share a row
+    ok(st.targetHistory.length >= 2);
+    ok(st.plan.dayTypes.lift.tdee > st.plan.dayTypes.rest.tdee);
+    const last = st.targetHistory.at(-1).targets;
+    ok(last.lift.kcal === last.lift.p * 4 + last.lift.c * 4 + last.lift.f * 9);
+  });
+  await check('no console errors in any of these flows', async () => eq(page.errors.length, 0, page.errors.join('; ')));
+  await ctx.close();
+}
+
+console.log('\nWelcome paths');
+{
+  const { ctx, page } = await newPage();
+  await check('"set up from my body stats" builds a working target-only plan', async () => {
+    await page.goto(BASE);
+    await page.click('[data-act="calc-welcome"]');
+    await page.fill('input[data-input="calc-field"][data-k="age"]', '30');
+    await page.fill('input[data-input="calc-field"][data-k="heightCm"]', '178');
+    await page.fill('input[data-input="calc-field"][data-k="weightKg"]', '78');
+    await page.fill('input[data-input="calc-field"][data-k="bfPct"]', '18');
+    await page.click('[data-act="calc-create"]');
+    await page.waitForSelector('.tabbar');
+    ok(await kcalTarget(page) > 1800);
+    eq(await page.locator('[data-key^="meal-"]').count(), 3);
+    // no menus and no program: Plan and Train degrade gracefully instead of crashing
+    await page.click('[data-act="tab"][data-v="plan"]');
+    ok((await page.locator('main').innerText()).includes('no meal menus'));
+    await page.click('[data-act="tab"][data-v="train"]');
+    ok((await page.locator('main').innerText()).includes('does not include a training program') || (await page.locator('main').innerText()).includes("doesn't include a training program"));
+    // logging a quick entry still works
+    await page.click('[data-act="tab"][data-v="today"]');
+    await page.click('[data-key="meal-meal1"] [data-act="add-food"]');
+    await page.click('[data-act="sheet-tab"][data-v="quick"]');
+    await page.fill('input[data-field="quick.p"]', '30');
+    await page.click('[data-act="quick-add"]');
+    eq(await kcalEaten(page), 120);
+  });
+  await check('calculator refuses to create a plan without the basics', async () => {
+    const { ctx: c2, page: p2 } = await newPage();
+    await p2.goto(BASE);
+    await p2.click('[data-act="calc-welcome"]');
+    ok((await p2.locator('[data-act="calc-create"]').getAttribute('disabled')) !== null, 'button should be disabled');
+    await c2.close();
+  });
+  await check('no console errors', async () => eq(page.errors.length, 0, page.errors.join('; ')));
   await ctx.close();
 }
 

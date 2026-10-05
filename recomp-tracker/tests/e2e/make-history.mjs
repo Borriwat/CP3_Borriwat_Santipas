@@ -31,6 +31,15 @@ export function buildHistory(today = todayISO(), days = 28) {
   return s;
 }
 
+// Flat weight, no waist change, no strength logged, plan followed: the review should say NEXT.
+export function buildStalledHistory(today = todayISO(), days = 28) {
+  const s = freshState(today);
+  const start = addDays(today, -days);
+  s.prefs.programAnchor = start;
+  fill(s, start, days, { weights: (i) => 75 + (i % 2 ? 0.05 : -0.05), perfect: () => true }, today);
+  return s;
+}
+
 if (process.argv[1].endsWith('make-history.mjs')) {
   const out = process.argv[2];
   writeFileSync(out, S.exportState(buildHistory()));

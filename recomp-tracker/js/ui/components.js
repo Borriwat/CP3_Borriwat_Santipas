@@ -130,3 +130,10 @@ export function barChart({ pts, height = 130, label = 'Chart' }) {
     })}
   </svg>`;
 }
+
+// Waist and hips: smaller is the goal. Chest, arm, thigh: bigger is the goal.
+export const girthClass = (key, delta) => {
+  if (!delta) return '';
+  const shrinkGood = key === 'waist' || key === 'hip';
+  return (delta < 0) === shrinkGood ? 'down' : 'up';
+};

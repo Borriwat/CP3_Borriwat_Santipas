@@ -2,6 +2,7 @@
 // re-render. Mutations go through update(fn) where fn edits the state in place.
 
 import { defaultState, parseBackup } from './state.js';
+import { freezeDayTypes } from './schedule.js';
 import { todayISO } from './dates.js';
 
 export function createStore(storage, { saveDelay = 350, today = todayISO } = {}) {
@@ -51,8 +52,14 @@ export function createStore(storage, { saveDelay = 350, today = todayISO } = {})
       } catch (e) {
         meta.loadError = e?.message || 'Could not read saved data';
       }
+      freezeDayTypes(state, today());
       meta.ready = true;
       notify();
+    },
+
+    // Call when the app comes back to the foreground (the date may have rolled over).
+    rollover() {
+      if (freezeDayTypes(state, today())) schedule();
     },
 
     subscribe(fn) {
@@ -68,6 +75,7 @@ export function createStore(storage, { saveDelay = 350, today = todayISO } = {})
 
     replace(next) {
       state = next;
+      freezeDayTypes(state, today());
       schedule();
       notify();
     },
