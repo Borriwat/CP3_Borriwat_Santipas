@@ -2,7 +2,7 @@ import './core/polyfills.js';
 import { createStore } from './core/store.js';
 import { createStorage, requestPersistence } from './core/storage.js';
 import { morph, html } from './ui/dom.js';
-import { ui, bindStore, setRender, getStore, closeSheet } from './ui/ctx.js';
+import { ui, bindStore, setRender, getStore, closeSheet, releaseSheet } from './ui/ctx.js';
 import { icon } from './ui/components.js';
 import { renderSheet } from './ui/sheets.js';
 import { renderToday, actions as todayA, changes as todayC } from './ui/today.js';
@@ -11,7 +11,8 @@ import { renderTrain, actions as trainA, changes as trainC, syncWakeLock, unlock
 import { renderProgress, actions as progressA, changes as progressC } from './ui/progress.js';
 import { renderMore, actions as moreA, changes as moreC } from './ui/more.js';
 import { renderWelcome, actions as welcomeA } from './ui/welcome.js';
-import { sheetActions, sheetChanges, inputs } from './ui/sheet-actions.js';
+import { sheetActions, sheetChanges, inputs as sheetInputs } from './ui/sheet-actions.js';
+import { photoActions, photoChanges, photoInputs } from './ui/sheets-photo.js';
 
 const TABS = [
   ['today', 'Today', 'today'],
@@ -23,10 +24,10 @@ const TABS = [
 const VIEWS = { today: renderToday, plan: renderPlan, train: renderTrain, progress: renderProgress, more: renderMore };
 
 const ACTIONS = {
-  ...todayA, ...planA, ...trainA, ...progressA, ...moreA, ...welcomeA, ...sheetActions,
+  ...todayA, ...planA, ...trainA, ...progressA, ...moreA, ...welcomeA, ...sheetActions, ...photoActions,
   tab: (el) => {
     ui.tab = el.dataset.v;
-    ui.sheet = null;
+    releaseSheet();
     try {
       sessionStorage.setItem('rt-tab', ui.tab);
     } catch {
@@ -37,7 +38,8 @@ const ACTIONS = {
   },
   'update-reload': () => location.reload(),
 };
-const CHANGES = { ...todayC, ...trainC, ...progressC, ...moreC, ...sheetChanges };
+const CHANGES = { ...todayC, ...trainC, ...progressC, ...moreC, ...sheetChanges, ...photoChanges };
+const INPUTS = { ...sheetInputs, ...photoInputs };
 
 const $ = (id) => document.getElementById(id);
 
@@ -101,7 +103,7 @@ function wireEvents() {
   document.addEventListener('input', (ev) => {
     const el = ev.target.closest('[data-input]');
     if (!el) return;
-    const fn = inputs[el.dataset.input];
+    const fn = INPUTS[el.dataset.input];
     if (fn) fn(el, ev);
     else console.warn('No input handler:', el.dataset.input);
   });

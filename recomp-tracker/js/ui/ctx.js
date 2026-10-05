@@ -40,8 +40,15 @@ export const openSheet = (type, props = {}) => {
   ui.sheet = { type, ...props };
   render();
 };
-export const closeSheet = () => {
+// Things that must be cleaned up whenever a sheet goes away (e.g. a photo held in memory).
+const closeHooks = [];
+export const onSheetClosed = (fn) => closeHooks.push(fn);
+export const releaseSheet = () => {
   ui.sheet = null;
+  for (const fn of closeHooks) fn();
+};
+export const closeSheet = () => {
+  releaseSheet();
   render();
 };
 

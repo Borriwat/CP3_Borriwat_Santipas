@@ -33,7 +33,7 @@ export function renderWelcome() {
       <div class="feature">${icon('today')}<div><b>Hit your numbers</b><div class="small muted">Log meals in a tap, swap ingredients, and rebalance the rest of the day when you eat off-plan.</div></div></div>
       <div class="feature">${icon('train')}<div><b>Train with a plan</b><div class="small muted">Set-by-set logging, last-time hints and a rest timer.</div></div></div>
       <div class="feature">${icon('progress')}<div><b>Know when to change</b><div class="small muted">Weight trends, measurements, and a Hold-or-Next review every two weeks.</div></div></div>
-      <div class="feature">${icon('shield')}<div><b>Private</b><div class="small muted">Your data and plan stay on this device. Nothing is uploaded.</div></div></div>
+      <div class="feature">${icon('shield')}<div><b>Private</b><div class="small muted">Your data and plan stay on this device. The only thing that is ever sent is a meal photo you choose to have analysed (optional).</div></div></div>
     </div>
     <p class="tiny muted center">General guidance, not medical advice.</p>
   </main>`;

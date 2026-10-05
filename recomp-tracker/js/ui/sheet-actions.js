@@ -8,6 +8,7 @@ import { validatePlan, basicPlan } from '../core/plan.js';
 import { evaluateReview, applySuggestion } from '../core/review.js';
 import { foodMacros, normalizeTarget } from '../core/macros.js';
 import { swapPrompt } from '../core/prompts.js';
+import { newPhoto } from './sheets-photo.js';
 import { withCardio, withLift } from '../core/schedule.js';
 import { addDays } from '../core/dates.js';
 import { slotLabel } from '../core/plan.js';
@@ -127,6 +128,7 @@ export const sheetActions = {
     ui.sheet.foodId = null;
     if (el.dataset.v === 'new') ui.sheet.nf ??= { unit: 'g', cat: 'other', name: ui.sheet.q || '' };
     if (el.dataset.v === 'quick') ui.sheet.quick ??= {};
+    if (el.dataset.v === 'photo') ui.sheet.photo ??= newPhoto();
     render();
   },
 

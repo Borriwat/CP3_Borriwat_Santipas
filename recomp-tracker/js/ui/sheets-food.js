@@ -8,6 +8,7 @@ import { rebalanceMeals } from '../core/scale.js';
 import { slotLabel } from '../core/plan.js';
 import { offPlanPrompt } from '../core/prompts.js';
 import { n0, n1, qtyText, signed, parseNum } from '../core/format.js';
+import { photoTab } from './sheets-photo.js';
 
 const unitWord = (f) => (f.unit === 'serving' ? 'servings' : f.unit);
 const per = (f) => (f.unit === 'serving' ? 'per serving' : `per 100 ${f.unit}`);
@@ -20,7 +21,7 @@ export function addFoodSheet(sh) {
   const s = getState();
   const recent = sortRecent(Object.entries(s.days).map(([d, v]) => [d, v.entries]));
   const label = slotLabel(s.plan, sh.slot);
-  const tabs = seg('sheet-tab', [['search', 'Search'], ['quick', 'Quick add'], ['new', 'New food']], sh.tab);
+  const tabs = seg('sheet-tab', [['search', 'Search'], ['photo', 'Photo'], ['quick', 'Quick add'], ['new', 'New food']], sh.tab);
   let body;
   let foot = null;
 
@@ -57,6 +58,8 @@ export function addFoodSheet(sh) {
       <div class="card flat"><b>${n0(m.kcal)} kcal</b> <span class="muted small">(calculated from P, C and F)</span></div>
     </div>`;
     foot = html`<button class="btn primary" data-act="quick-add" ${raw(m.kcal > 0 ? '' : 'disabled')}>Add to ${label}</button>`;
+  } else if (sh.tab === 'photo') {
+    ({ body, foot } = photoTab(sh, label));
   } else {
     const n = sh.nf || { unit: 'g', cat: 'other' };
     const basisText = n.unit === 'serving' ? 'per 1 serving' : `per 100 ${n.unit}`;
@@ -234,7 +237,7 @@ export function rebalanceSheet(sh) {
 
 export function promptSheet(sh) {
   let text;
-  let title = 'Ask an AI';
+  const title = 'Ask an AI';
   if (sh.text) text = sh.text;
   else {
     const m = dayModel(sh.date);

@@ -3,6 +3,7 @@ import { icon, seg, chip, checkbox, banner, girthClass } from './components.js';
 import { ui, getStore, todayISO, latestWeight } from './ctx.js';
 import { addFoodSheet, entrySheet, plannedItemSheet, swapSheet, rebalanceSheet, promptSheet } from './sheets-food.js';
 import { pickSessionSheet } from './train.js';
+import { aiKeySheet } from './sheets-photo.js';
 import { calculate } from '../core/tdee.js';
 import { DAY_TYPES, DAY_TYPE_LABEL } from '../core/tdee.js';
 import { TIMINGS } from '../core/plan.js';
@@ -306,6 +307,7 @@ const SHEETS = {
   swap: swapSheet,
   rebalance: rebalanceSheet,
   prompt: promptSheet,
+  aiKey: aiKeySheet,
   cardio: cardioSheet,
   supplements: supplementsSheet,
   targets: targetsSheet,
