@@ -127,6 +127,14 @@ export function addQuickEntry(state, date, { name, p = 0, c = 0, f = 0, a = 0 },
   });
 }
 
+// A food entered from an AI photo estimate: macros only, flagged as an estimate.
+export function addEstimateEntry(state, date, { name, p = 0, c = 0, f = 0, a = 0 }, slot) {
+  return addEntry(state, date, {
+    id: newId(), slot, foodId: null, name: name || 'Photo estimate', unit: 'serving', qty: 1,
+    p: round(p, 2), c: round(c, 2), f: round(f, 2), a: round(a, 2), src: 'ai', est: true,
+  });
+}
+
 // Log a meal exactly as planned (or as adjusted for today).
 export function logPlannedItems(state, date, slot, items, index, src = 'plan') {
   const out = [];

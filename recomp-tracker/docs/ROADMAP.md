@@ -11,14 +11,18 @@ effort. The first block is already built.
 - The **bi-weekly review**: Hold vs Next from results → data quality → consistency,
   with Q-low days and "unlogged days count as missed".
 - **Targets history** (old days keep old targets), calculator, and **menu resizing**.
+- **Photo logging with AI**: photo in, editable estimate out, logged as flagged
+  estimates. Uses the person's own API key, stored only on the phone.
 - Supplements checklist, water, sleep, weekly-measurement tracking, strength trend.
 - **Shopping list** for the next 7 days, calendar **reminders**, backup/restore, dark mode.
 
 ## Next, highest value first
 
-1. **Photo logging with AI, built in.** Take a photo, get an estimated breakdown to
-   confirm and log. Needs a small server (or a pasted API key) so the key isn't shipped
-   in the app. This is the biggest friction-saver for eating out.
+1. **Photo logging without a personal API key.** The built-in version asks you to make
+   your own key. A tiny server you control (for example a Cloudflare Worker) could hold
+   the key instead, so the phone never sees it and setup is one tap. Also worth adding:
+   remember corrections ("my usual rice portion is 220 g") and learn from them, and
+   use a barcode or label photo when there is one.
 2. **Progress photos** with a consistent-pose reminder and a side-by-side slider. The
    review already asks you to compare photos; keeping them in the app (on-device) would
    close that loop.

@@ -7,8 +7,9 @@ import { exportState, parseBackup, defaultState } from '../core/state.js';
 import { buildReminders } from '../core/ics.js';
 import { programDayKey, cycleIndex } from '../core/schedule.js';
 import { n0, n1, parseNum } from '../core/format.js';
+import { aiSettingsCard, keys } from './sheets-photo.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 const state = () => getStore().state;
 
 export function renderMore() {
@@ -45,6 +46,8 @@ export function renderMore() {
       ${plan.supplements.length ? html`<button class="btn block" style="margin-top:10px" data-act="supp-choose">Choose my supplements</button>` : ''}
     </section>
 
+    ${aiSettingsCard(s)}
+
     ${s.customFoods.length ? html`<section class="card"><div class="card-head"><h2>My foods</h2></div><div class="list">${s.customFoods.map((f) => html`<div class="item" data-key="cf-${f.id}"><div class="grow"><div class="title">${f.name}</div><div class="sub">${f.unit === 'serving' ? 'per serving' : 'per 100 ' + f.unit}: P ${n1(f.p)} · C ${n1(f.c)} · F ${n1(f.f)}</div></div><button class="btn icon sm ghost" data-act="food-del" data-id="${f.id}" aria-label="Delete ${f.name}">${icon('trash')}</button></div>`)}</div></section>` : ''}
 
     <section class="card"><div class="card-head"><h2>Reminders</h2></div>
@@ -68,7 +71,7 @@ export function renderMore() {
       <div class="row between" style="margin-top:12px"><div><div class="bold">Rest timer sound</div><div class="tiny muted">Beeps when the rest is over</div></div><button class="check" data-act="sound-toggle" aria-pressed="${String(s.prefs.sound !== false)}" aria-label="Rest timer sound">${icon('check')}</button></div></section>
 
     <section class="card flat"><h2>About</h2>
-      <p class="small muted" style="margin-top:6px">Recomp Tracker ${APP_VERSION}. Works offline; your data never leaves this device unless you export it.</p>
+      <p class="small muted" style="margin-top:6px">Recomp Tracker ${APP_VERSION}. Works offline. Your data never leaves this device unless you export it or use photo logging, which sends the photo you choose to Anthropic.</p>
       <p class="small muted" style="margin-top:6px">Food values are approximate and meant to help you stay near your targets, not to be exact. This app gives general guidance for diet and training and is not medical advice. If you have a medical condition, are pregnant, or take medication, talk to a doctor or dietitian before changing how you eat or train.</p></section>
   </div></main>`;
 }
@@ -123,10 +126,12 @@ export const actions = {
   'reset-all': () =>
     openSheet('confirm', {
       title: 'Delete everything?',
-      message: 'This permanently deletes your plan, logs, weights, workouts and measurements from this phone. If you have not exported a backup, they cannot be recovered.',
+      message: 'This permanently deletes your plan, logs, weights, workouts, measurements and your AI photo key from this phone. If you have not exported a backup, they cannot be recovered.',
       label: 'Delete all data',
       onYes: () => {
         getStore().replace(defaultState(todayISO()));
+        keys.clear();
+        ui.aiTest = null;
         ui.tab = 'today';
         ui.date = null;
         toast('All data deleted');

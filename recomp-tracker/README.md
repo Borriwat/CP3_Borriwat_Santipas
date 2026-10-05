@@ -5,7 +5,8 @@ meals and macros, training logs with a rest timer, weight and measurements, and 
 bi-weekly **Hold / Next** review that tells you when it is time to change something.
 
 - Works offline, installs to the Home Screen, no account, no App Store, no cost.
-- All data stays on your phone. Nothing is uploaded.
+- All data stays on your phone. Nothing is uploaded, unless you turn on the optional
+  [AI photo logging](#photo-logging-with-ai-optional), which sends the photos you choose to Anthropic.
 - No build tools or dependencies. Plain JavaScript, HTML and CSS.
 
 > **Privacy note: this repository is public.** The app itself is generic and safe to
@@ -55,11 +56,11 @@ No plan file? Tap **Set up from my body stats** to get targets from the calculat
 | **Progress** | Weight with 7-day average, measurements, the last 14 days at a glance, strength per exercise, and the **bi-weekly review**. |
 | **More** | Menu / gym-or-home choice, schedule, calculator, supplements, reminders, backup, theme. |
 
-**Eating off-plan.** Add what you ate (search, quick-add macros, or your own foods). If
-you end up over or under, the **Rebalance** banner resizes the meals you still have to
-eat so the day lands back on target. For a meal you can't weigh, the ✨ button builds a
-ready-to-paste prompt (with your numbers filled in) for Claude or any AI, to use with a
-photo.
+**Eating off-plan.** Add what you ate (search, **photo**, quick-add macros, or your own
+foods). If you end up over or under, the **Rebalance** banner resizes the meals you still
+have to eat so the day lands back on target. For a meal you can't weigh, take a photo (see
+below). The ✨ button also builds a ready-to-paste prompt (with your numbers filled in)
+for Claude or any AI chat, if you would rather not set up an API key.
 
 **Swapping an ingredient.** Tap a planned item → *Swap*. It matches the macro that
 ingredient is there for (protein for a protein source, carbs for a carb source…) and
@@ -74,6 +75,46 @@ It is guidance, not medical advice.
 
 **Q-low days.** Big or salty meal, alcohol, poor sleep, period, travel? Mark the day.
 It is kept in your data, never deleted from averages, and counted in the review.
+
+### Photo logging with AI (optional)
+
+Take a photo of a meal and the app estimates what is on the plate and its calories and
+macros. You check and correct the numbers, then log them. Nothing is logged until you
+tap **Add**.
+
+**One-time setup (about 5 minutes).** The app has no server, so it uses *your own*
+Anthropic API key and you pay Anthropic directly. This is separate from a Claude chat
+subscription.
+
+1. Sign in to the Claude Console at **platform.claude.com** and add a few dollars of
+   credit under Billing.
+2. Create an **API key** just for this app. If the Console lets you set a monthly spend
+   limit, set a small one.
+3. In the app: **Today → Add food → Photo** (or **More → AI photo logging**), paste the
+   key, and tap **Save key**. **More → Test key** checks that it works.
+
+**Using it.** *Add food → Photo → Take or choose a photo.* Add a note if something is not
+visible (oil, sauce, sugar in a drink, "about 150 g rice"). Tap **Estimate**, fix any
+weight that looks wrong (the macros follow), remove items you did not eat, and tap
+**Add**. Each item is logged with an **estimate** tag.
+
+**What it costs.** Roughly 3 to 5 US cents a photo with *Best accuracy* and 1 to 3 cents
+with *Cheaper* (choose in More). These are estimates; your usage shows in the Console.
+
+**Privacy.**
+- The key stays on your phone. It is **not** part of backups and is removed by *Delete
+  all data*. It is sent only to Anthropic.
+- A photo is shrunk on the phone (and its location and camera data dropped) before it is
+  sent to Anthropic to be analysed. The app does not keep the photo. Anthropic's own
+  data policy applies to what you send.
+- The app's security policy only allows it to talk to itself and to `api.anthropic.com`.
+- Anyone who can run code on this page could read the key. Use a key made just for this
+  app with a spending limit, and do not host other people's pages at the same address.
+
+**How accurate is it?** Treat it as a good first guess, not a measurement. Estimates from
+photos are commonly 20% or more off, mixed dishes and sauces most of all. When you can
+weigh the food, weigh it. It needs an internet connection; everything else in the app
+works offline.
 
 ### Back up your data
 
@@ -111,8 +152,8 @@ private repo, so you'd host the app elsewhere).
 - **No Apple Health / Apple Watch.** Web apps can't read HealthKit. Enter weight and
   cardio by hand (a native app could do this; see the roadmap).
 - **No push notifications** (use the calendar reminders above).
-- **Food photo recognition is not built in.** It needs an AI service and an API key; for
-  now use the prompt button with Claude or another AI.
+- **Photo logging needs internet and your own API key** (see above). It is an estimate, not
+  a measurement, and has not been tested against every kind of cuisine.
 - **Nutrition values are approximate.** The built-in foods are rounded public-database
   values and the dish entries are rough estimates (flagged as such). Weigh things when it
   matters, and add your own foods for anything you eat often.
@@ -125,11 +166,11 @@ private repo, so you'd host the app elsewhere).
 
 ```bash
 cd recomp-tracker
-npm test                  # 90 unit tests, Node only, no dependencies
+npm test                  # 110 unit tests, Node only, no dependencies
 npm run serve             # http://localhost:8080  (needs http-server: npx will fetch it)
 npm run build             # regenerates sw.js, REQUIRED after changing any shipped file
 npm run check             # fails if sw.js is stale (also enforced by a unit test)
-npm run e2e               # 57 browser checks (needs: npm i --no-save playwright)
+npm run e2e               # 73 browser checks (needs: npm i --no-save playwright)
 node tools/make-icons.mjs # regenerate the PNG icons from icons/icon.svg
 ```
 
@@ -155,3 +196,10 @@ Design decisions worth knowing:
   rewrite past adherence.
 - Plan files are untrusted input: ids are validated, all text is escaped, and long
   unbroken text wraps instead of breaking the layout (all covered by tests).
+- AI replies are untrusted too: they are parsed against a schema, numbers are capped to
+  what a plate could hold, and every string is escaped (`js/core/ai.js`, tested with
+  hostile replies). The photo flow is tested against a pretend Anthropic server, so the
+  tests need no key and cost nothing.
+- The API key lives in its own storage (`js/core/aikey.js`), never in the app state, so
+  backups cannot contain it. `index.html` carries a Content-Security-Policy that limits
+  network access to the app and `api.anthropic.com`; a test proves other hosts are blocked.

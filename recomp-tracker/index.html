@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- The app may talk only to itself and to Anthropic (for photo logging), and run only its own scripts.
+       This is what keeps a saved API key from being sent anywhere else. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; connect-src 'self' https://api.anthropic.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
   <title>Recomp Tracker</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Offline-first diet, macro, training and body-metric tracker with bi-weekly reviews.">
