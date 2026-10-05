@@ -13,6 +13,13 @@ import { kcalOf } from './macros.js';
 
 export const DAY_TYPES = ['rest', 'lift', 'cardio', 'lift_cardio'];
 
+export const DAY_TYPE_SHORT = {
+  rest: 'Rest',
+  lift: 'Lift',
+  cardio: 'Cardio',
+  lift_cardio: 'Lift+Cardio',
+};
+
 export const DAY_TYPE_LABEL = {
   rest: 'Rest',
   lift: 'Lift',

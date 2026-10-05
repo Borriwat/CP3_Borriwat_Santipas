@@ -16,7 +16,6 @@ export function normalizeFood(f) {
   return {
     unit: 'g',
     basis: f.unit === 'serving' ? 1 : 100,
-    a: 0,
     ...f,
     p: Number(f.p) || 0,
     c: Number(f.c) || 0,

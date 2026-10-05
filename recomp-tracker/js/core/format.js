@@ -24,3 +24,12 @@ export const qtyText = (qty, unit = 'g') => {
 export const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
 export const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+
+// Accepts "72.5", "72,5" and stray spaces (some iPhone keyboards use a comma).
+// Returns NaN for blank or junk, so callers can tell "no value" apart from 0.
+export const parseNum = (v) => {
+  if (typeof v === 'number') return v;
+  const s = String(v ?? '').trim().replace(',', '.');
+  if (s === '' || !/^-?\d*\.?\d+$|^-?\d+\.$/.test(s)) return NaN;
+  return Number(s);
+};

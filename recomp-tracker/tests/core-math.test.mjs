@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { kcalOf, macros, sumMacros, foodMacros, makeEntry, normalizeTarget, round } from '../js/core/macros.js';
 import { buildFoodIndex, searchFoods, matchMacroFor } from '../js/core/foods.js';
 import { swapFood, suggestSwaps, roundQty } from '../js/core/swap.js';
-import { scaleItems, rebalanceMeals } from '../js/core/scale.js';
+import { scaleItems, rebalanceMeals, rescaleMenu } from '../js/core/scale.js';
+import { shoppingList } from '../js/core/grocery.js';
+import { menuDayTotals } from '../js/core/plan.js';
+import { freshState, indexOf, TODAY } from './helpers.mjs';
 import { calculate, weightAt10Pct, bmr, deriveTarget, metKcal } from '../js/core/tdee.js';
 import { addDays, diffDays, dateRange, isISO } from '../js/core/dates.js';
 
@@ -182,4 +185,40 @@ test('date helpers are DST-safe and inclusive', () => {
   assert.ok(isISO('2026-02-28'));
   assert.ok(!isISO('2026-02-30x'));
   assert.ok(!isISO('26-1-1'));
+});
+
+test('rescaleMenu re-sizes every day to new targets and does not touch the input', () => {
+  const s = freshState();
+  const index = indexOf(s);
+  const menu = s.plan.menus.A;
+  const before = JSON.stringify(menu);
+  const targets = {};
+  for (const [dt, d] of Object.entries(s.plan.dayTypes)) targets[dt] = { p: d.target.p, c: d.target.c - 30, f: d.target.f };
+  const next = rescaleMenu(menu, targets, index);
+  assert.equal(JSON.stringify(menu), before, 'input untouched');
+  for (const dt of Object.keys(targets)) {
+    const t = menuDayTotals({ menus: { X: next } }, index, 'X', dt);
+    const old = menuDayTotals({ menus: { X: menu } }, index, 'X', dt);
+    assert.ok(Math.abs(t.c - targets[dt].c) < 8, `${dt}: carbs ${t.c} vs ${targets[dt].c}`);
+    assert.ok(Math.abs(t.p - targets[dt].p) < 8, `${dt}: protein ${t.p} vs ${targets[dt].p}`);
+    assert.ok(t.c < old.c - 15, 'carbs went down');
+  }
+});
+
+test('shoppingList totals weighed amounts across the days, using each day type', () => {
+  const s = freshState();
+  const index = indexOf(s);
+  const list = shoppingList(s, index, TODAY, 7, TODAY);
+  assert.ok(list.length >= 8);
+  const sum = (id) => list.find((r) => r.food.id === id)?.qty || 0;
+  // 5 lift days use the 4-meal template with chicken at lunch; compute the expected total by hand
+  let want = 0;
+  for (let i = 0; i < 7; i++) {
+    const type = i === 3 || i === 6 ? 'rest' : 'lift';
+    for (const items of Object.values(s.plan.menus.A.days[type])) for (const it of items) if (it.food === 'chicken-breast-raw') want += it.q;
+  }
+  assert.equal(sum('chicken-breast-raw'), want);
+  assert.ok(list.every((r) => r.qty > 0 && r.days >= 1));
+  s.prefs.menu = null;
+  assert.deepEqual(shoppingList(s, index, TODAY, 7, TODAY), []);
 });

@@ -58,7 +58,10 @@ export function ensureDay(state, date) {
 
 export function applyPlan(state, plan, today) {
   state.plan = plan;
-  state.targetHistory = [{ from: '1970-01-01', targets: targetsFromPlan(plan) }];
+  // First plan: targets apply to all time. Replacing a plan later must not
+  // rewrite past days, so the new targets only take effect from today.
+  if (state.targetHistory.length) setTargets(state, today, targetsFromPlan(plan));
+  else state.targetHistory = [{ from: '1970-01-01', targets: targetsFromPlan(plan) }];
   const menuIds = Object.keys(plan.menus || {});
   state.prefs.menu = menuIds.includes(state.prefs.menu) ? state.prefs.menu : menuIds[0] || null;
   const editions = Object.keys(plan.program?.editions || {});
@@ -163,7 +166,8 @@ export function addWater(state, date, ml) {
   d.water = Math.max(0, (d.water || 0) + ml);
 }
 
-export function setWeight(state, date, kg, bf = null) {
+// `bf` undefined leaves the body-fat reading alone; null (or invalid) clears it.
+export function setWeight(state, date, kg, bf) {
   const d = ensureDay(state, date);
   d.weight = Number.isFinite(kg) && kg > 0 ? round(kg, 2) : null;
   if (bf !== undefined) d.bf = Number.isFinite(bf) && bf > 0 ? round(bf, 1) : null;

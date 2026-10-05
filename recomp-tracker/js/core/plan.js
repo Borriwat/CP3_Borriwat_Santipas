@@ -191,3 +191,30 @@ export function programDays(plan) {
 export function exercisesFor(plan, edition, dayKey) {
   return plan?.program?.editions?.[edition]?.days?.[dayKey] || [];
 }
+
+// A minimal plan (targets only, no menus or program) for people who start
+// from their body stats instead of importing a plan file.
+export function basicPlan({ profile, targets, tdee = {}, phase = 'recomp' }) {
+  const three = ['meal1', 'meal2', 'meal3'];
+  const four = ['meal1', 'meal2', 'meal3', 'meal4'];
+  const slots = {};
+  for (const s of four) slots[s] = { label: `Meal ${s.slice(4)}` };
+  const slotsByType = { rest: three, lift: four, cardio: three, lift_cardio: four };
+  const dayTypes = {};
+  for (const t of DAY_TYPES) {
+    dayTypes[t] = { target: { p: targets[t].p, c: targets[t].c, f: targets[t].f }, tdee: tdee[t] ?? null, slots: slotsByType[t] };
+  }
+  return {
+    schema: PLAN_SCHEMA,
+    name: 'My plan',
+    source: 'Created in the app from body stats.',
+    profile,
+    phase,
+    slots,
+    dayTypes,
+    foods: [],
+    menus: {},
+    program: null,
+    supplements: [],
+  };
+}

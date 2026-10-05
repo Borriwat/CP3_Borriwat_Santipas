@@ -119,3 +119,16 @@ test('formatting helpers', () => {
   assert.equal(signed(0.04, 1), '0');
   assert.equal(signed(5), '+5');
 });
+
+test('parseNum handles comma decimals, blanks and junk', async () => {
+  const { parseNum } = await import('../js/core/format.js');
+  assert.equal(parseNum('72.5'), 72.5);
+  assert.equal(parseNum('72,5'), 72.5);
+  assert.equal(parseNum(' 80 '), 80);
+  assert.equal(parseNum('.5'), 0.5);
+  assert.ok(Number.isNaN(parseNum('')));
+  assert.ok(Number.isNaN(parseNum('abc')));
+  assert.ok(Number.isNaN(parseNum('1.2.3')));
+  assert.ok(Number.isNaN(parseNum(null)));
+  assert.equal(parseNum(0), 0);
+});

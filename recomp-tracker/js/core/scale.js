@@ -110,3 +110,30 @@ export const describeChange = (before, after, food) => {
   if (d === 0) return `${food.name}: no change`;
   return `${food.name}: ${before} → ${after}${food.unit === 'serving' ? '' : ' ' + food.unit} (${d > 0 ? '+' : ''}${d})`;
 };
+
+/**
+ * Re-size a whole menu to new day targets, keeping each meal's share of the day.
+ * @param menu     { days: { dayType: { slot: [{food, q}] } } }
+ * @param targets  { dayType: { p, c, f } }
+ * @returns a new menu object (the input is not modified)
+ */
+export function rescaleMenu(menu, targets, index) {
+  const out = structuredClone(menu);
+  for (const [dt, slots] of Object.entries(menu.days || {})) {
+    const tg = targets[dt];
+    if (!tg) continue;
+    const per = Object.entries(slots).map(([slot, items]) => ({
+      slot,
+      items: items.map((i) => ({ foodId: i.food, qty: i.q })),
+    }));
+    const macrosOf = (items) => sumMacros(items.map((i) => foodMacros(index.get(i.foodId), i.qty)));
+    const mm = per.map((x) => ({ ...x, m: macrosOf(x.items) }));
+    const total = sumMacros(mm.map((x) => x.m));
+    for (const x of mm) {
+      const share = (k) => (total[k] > 0 ? x.m[k] / total[k] : 1 / mm.length);
+      const r = scaleItems(x.items, { p: tg.p * share('p'), c: tg.c * share('c'), f: tg.f * share('f') }, index);
+      out.days[dt][x.slot] = r.items.map((i) => ({ food: i.foodId, q: i.qty }));
+    }
+  }
+  return out;
+}

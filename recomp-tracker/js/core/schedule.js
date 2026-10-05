@@ -42,3 +42,8 @@ export function resolveDayType(state, date, today) {
   }
   return 'rest';
 }
+
+// If the day type was chosen by hand, doing extra training should upgrade it
+// (rest + cardio = cardio day, lift + cardio = lift + cardio day) so the targets match.
+export const withCardio = (t) => (t === 'lift' ? 'lift_cardio' : t === 'rest' ? 'cardio' : t);
+export const withLift = (t) => (t === 'cardio' ? 'lift_cardio' : t === 'rest' ? 'lift' : t);

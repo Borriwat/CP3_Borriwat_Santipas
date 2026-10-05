@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildExamplePlan } from '../js/data/example-plan.js';
-import { validatePlan, PLAN_SCHEMA, targetsOn, menuDayTotals } from '../js/core/plan.js';
+import { validatePlan, PLAN_SCHEMA, targetsOn, menuDayTotals, basicPlan } from '../js/core/plan.js';
+import { calculate } from '../js/core/tdee.js';
 import { buildFoodIndex } from '../js/core/foods.js';
-import { cycleIndex, programDayKey, anchorForDay, resolveDayType } from '../js/core/schedule.js';
+import { cycleIndex, programDayKey, anchorForDay, resolveDayType, withCardio, withLift } from '../js/core/schedule.js';
 import * as S from '../js/core/state.js';
 import { dayTotals, dayStatus } from '../js/core/stats.js';
 import { freshState, indexOf, logPerfectDay, logLift, TODAY } from './helpers.mjs';
@@ -216,3 +217,42 @@ test('menuDayTotals sums a whole menu day', () => {
 });
 
 test('plan schema constant is stable', () => assert.equal(PLAN_SCHEMA, 'recomp-tracker-plan/1'));
+
+test('re-importing a plan keeps past targets and applies new ones from today', () => {
+  const s = freshState();
+  const old = s.targetHistory[0].targets.lift.c;
+  const next = buildExamplePlan();
+  next.dayTypes.lift.target.c = old + 40;
+  S.applyPlan(s, validatePlan(next).plan, TODAY);
+  assert.equal(targetsOn(s.targetHistory, '2026-06-01', 'lift').c, old, 'earlier days keep the old targets');
+  assert.equal(targetsOn(s.targetHistory, TODAY, 'lift').c, old + 40);
+});
+
+test('basicPlan builds a valid target-only plan from the calculator', () => {
+  const calc = calculate({ sex: 'F', age: 28, heightCm: 165, weightKg: 60, bfPct: 24, activityKcal: 350, liftKcal: 250, cardio: { met: 7, minutes: 40 } });
+  const raw = basicPlan({ profile: { name: 'Sam', sex: 'F', age: 28, heightCm: 165, weightKg: 60, bfPct: 24 }, targets: calc.targets, tdee: calc.tdee });
+  const v = validatePlan(raw);
+  assert.equal(v.ok, true, v.errors.join());
+  assert.equal(v.plan.menus && Object.keys(v.plan.menus).length, 0);
+  assert.equal(v.plan.program, null);
+  assert.equal(v.plan.dayTypes.lift.slots.length, 4);
+  const s = S.defaultState(TODAY);
+  S.applyPlan(s, v.plan, TODAY);
+  assert.equal(s.prefs.menu, null);
+  assert.equal(s.prefs.edition, null);
+  assert.deepEqual(s.prefs.supplementIds, []);
+});
+
+test('regression: editing the weight alone keeps the body-fat reading', () => {
+  const s = freshState();
+  S.setWeight(s, TODAY, 75, 17.5);
+  S.setWeight(s, TODAY, 74.6); // bf omitted
+  assert.deepEqual([s.days[TODAY].weight, s.days[TODAY].bf], [74.6, 17.5]);
+  S.setWeight(s, TODAY, 74.6, null); // explicit null clears it
+  assert.equal(s.days[TODAY].bf, null);
+});
+
+test('withCardio / withLift upgrade a hand-picked day type', () => {
+  assert.deepEqual(['rest', 'lift', 'cardio', 'lift_cardio'].map(withCardio), ['cardio', 'lift_cardio', 'cardio', 'lift_cardio']);
+  assert.deepEqual(['rest', 'lift', 'cardio', 'lift_cardio'].map(withLift), ['lift', 'lift', 'lift_cardio', 'lift_cardio']);
+});
