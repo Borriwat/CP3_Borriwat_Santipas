@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Recomp Tracker">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17372d"/><stop offset="1" stop-color="#0b1511"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="124" y="236" width="68" height="152" rx="22" fill="#7aa5ff"/>
+  <rect x="222" y="168" width="68" height="220" rx="22" fill="#f0b43a"/>
+  <rect x="320" y="204" width="68" height="184" rx="22" fill="#f58aa8"/>
+  <rect x="104" y="404" width="304" height="14" rx="7" fill="#3fc48b"/>
+</svg>
