@@ -105,6 +105,10 @@ function rebalanceBanner(m) {
     <button class="btn sm primary" style="margin-top:8px" data-act="rebalance-open">Rebalance the rest of today</button></div></div>`;
 }
 
+// The meal's name is a button: tap it to rename the meal.
+const nameButton = (slot, label) =>
+  html`<button type="button" class="name-btn" data-act="meal-rename" data-slot="${slot}" aria-label="Rename ${label}">${label}${icon('edit')}</button>`;
+
 const cooked = (f, qty) => (f?.cr ? html` <span class="muted">· ≈${n0(qty * f.cr)} g cooked</span>` : '');
 
 function mealCard(m, meal) {
@@ -114,7 +118,7 @@ function mealCard(m, meal) {
   const canLog = !logged && meal.items.length > 0;
   return html`<section class="card" style="margin-top:12px" data-key="meal-${meal.slot}">
     <div class="meal-title">
-      <h3>${meal.label}</h3>
+      <h3>${nameButton(meal.slot, meal.label)}</h3>
       <div class="row" style="gap:4px">
         ${logged ? html`<span class="pill ok">${icon('check')} Logged</span>` : meal.adjusted ? html`<span class="pill warn">Adjusted today</span>` : meal.items.length ? html`<span class="pill">Planned</span>` : html`<span class="pill">Empty</span>`}
         <button class="btn sm ghost icon" data-act="ask-claude" data-slot="${meal.slot}" aria-label="Ask an AI about this meal" title="Ask an AI about this meal">${icon('sparkle')}</button>
@@ -155,7 +159,7 @@ function extraCard(m) {
   const list = m.extraEntries;
   const tot = list.reduce((a, e) => a + entryMacros(e).kcal, 0);
   return html`<section class="card" style="margin-top:12px">
-    <div class="meal-title"><h3>Snacks / other</h3>${list.length ? html`<span class="pill">${n0(tot)} kcal</span>` : ''}</div>
+    <div class="meal-title"><h3>${nameButton('extra', S.mealLabel(m.s, m.date, 'extra'))}</h3>${list.length ? html`<span class="pill">${n0(tot)} kcal</span>` : ''}</div>
     ${list.length ? html`<div class="list" style="margin-top:6px">${list.map((e) => entryRow(e, m.index))}</div>` : html`<p class="small muted" style="margin-top:4px">Anything outside your meals. It counts toward today.</p>`}
     <div style="margin-top:10px"><button class="btn soft block" data-act="add-food" data-slot="extra">${icon('plus')} Add food or drink</button></div>
   </section>`;

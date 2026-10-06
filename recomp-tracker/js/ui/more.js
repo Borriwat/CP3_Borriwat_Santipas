@@ -9,7 +9,7 @@ import { programDayKey, cycleIndex } from '../core/schedule.js';
 import { n0, n1, parseNum } from '../core/format.js';
 import { aiSettingsCard, keys } from './sheets-photo.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 const state = () => getStore().state;
 
 export function renderMore() {

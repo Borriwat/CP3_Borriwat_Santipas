@@ -5,6 +5,7 @@ import { makeEntry, newId, round } from './macros.js';
 import { anchorForDay } from './schedule.js';
 import { DAY_TYPES } from './tdee.js';
 import { normalizeFood } from './foods.js';
+import { slotLabel } from './plan.js';
 
 export const STATE_VERSION = 1;
 
@@ -24,6 +25,7 @@ export function defaultState(today) {
       tolerance: { kcal: 150, p: 10, avgBias: 100 },
       weighTime: '07:00',
       sex: 'M',
+      mealNames: {}, // slot -> name, for every day
     },
     days: {},
     measurements: [],
@@ -45,6 +47,7 @@ export const blankDay = () => ({
   supps: [],
   workout: null,
   cardio: [],
+  mealNames: {}, // slot -> name, for this day only
 });
 
 export const getDay = (state, date) => state.days[date] || blankDay();
@@ -88,6 +91,49 @@ export function setTargets(state, from, targets) {
 export function setProgramDay(state, today, n) {
   const len = state.plan?.program?.cycle?.length;
   if (len) state.prefs.programAnchor = anchorForDay(today, n, len);
+}
+
+// ---- Meal names ------------------------------------------------------------
+// A meal is a slot (breakfast, pre, lunch...). Its name can be changed for one day
+// or for every day. Only the name changes: the slot, its planned foods and
+// anything already logged stay exactly as they were.
+
+export const MEAL_NAME_MAX = 40;
+
+export const cleanMealName = (text) =>
+  String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MEAL_NAME_MAX).trim();
+
+// Keep only well-formed { slot: 'Name' } pairs (a backup file is untrusted input).
+export function cleanMealNames(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
+  return Object.fromEntries(
+    Object.entries(obj)
+      .filter(([k, v]) => /^[A-Za-z0-9_.-]{1,64}$/.test(k) && k !== '__proto__' && typeof v === 'string' && cleanMealName(v))
+      .map(([k, v]) => [k, cleanMealName(v)])
+  );
+}
+
+// The name the plan itself gives the meal.
+export const planMealLabel = (state, slot) => slotLabel(state.plan, slot);
+// The name used on every day without a one-day rename (the plan's, unless changed for every day).
+export const everydayMealLabel = (state, slot) => cleanMealName(state.prefs.mealNames?.[slot]) || planMealLabel(state, slot);
+// The name shown for a meal on a given day.
+export const mealLabel = (state, date, slot) => cleanMealName(state.days[date]?.mealNames?.[slot]) || everydayMealLabel(state, slot);
+
+// scope 'day' renames it on `date` only; 'always' renames it on every day. An empty
+// name, or one that matches what it would be anyway, removes the rename.
+export function setMealName(state, date, slot, name, scope = 'day') {
+  const clean = cleanMealName(name);
+  if (scope === 'always') {
+    state.prefs.mealNames = cleanMealNames(state.prefs.mealNames);
+    if (!clean || clean === planMealLabel(state, slot)) delete state.prefs.mealNames[slot];
+    else state.prefs.mealNames[slot] = clean;
+    return;
+  }
+  const d = ensureDay(state, date);
+  d.mealNames = cleanMealNames(d.mealNames);
+  if (!clean || clean === everydayMealLabel(state, slot)) delete d.mealNames[slot];
+  else d.mealNames[slot] = clean;
 }
 
 // ---- Food log ---------------------------------------------------------------
@@ -307,7 +353,8 @@ export function parseBackup(text, today) {
   const base = defaultState(today);
   const merged = { ...base, ...s, prefs: { ...base.prefs, ...(s.prefs || {}), tolerance: { ...base.prefs.tolerance, ...(s.prefs?.tolerance || {}) } } };
   merged.days = s.days && typeof s.days === 'object' ? s.days : {};
-  for (const k of Object.keys(merged.days)) merged.days[k] = { ...blankDay(), ...merged.days[k] };
+  for (const k of Object.keys(merged.days)) merged.days[k] = { ...blankDay(), ...merged.days[k], mealNames: cleanMealNames(merged.days[k]?.mealNames) };
+  merged.prefs.mealNames = cleanMealNames(merged.prefs.mealNames);
   for (const k of ['measurements', 'customFoods', 'reviews', 'targetHistory']) if (!Array.isArray(merged[k])) merged[k] = [];
   merged.v = STATE_VERSION;
   return { ok: true, state: merged };
