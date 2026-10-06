@@ -11,7 +11,6 @@ import { swapPrompt } from '../core/prompts.js';
 import { newPhoto } from './sheets-photo.js';
 import { withCardio, withLift } from '../core/schedule.js';
 import { addDays } from '../core/dates.js';
-import { slotLabel } from '../core/plan.js';
 import { parseNum } from '../core/format.js';
 import * as S from '../core/state.js';
 
@@ -257,7 +256,7 @@ export const sheetActions = {
     const src = swapSource(sh);
     const to = foodIndex().get(sh.pick);
     const slot = sh.slot || state().days[sh.date]?.entries.find((e) => e.id === sh.id)?.slot;
-    const text = swapPrompt({ slotLabel: slotLabel(state().plan, slot), from: src.from, fromQty: src.qty, toName: to.name, macros: foodMacros(src.from, src.qty) });
+    const text = swapPrompt({ slotLabel: S.mealLabel(state(), sh.date, slot), from: src.from, fromQty: src.qty, toName: to.name, macros: foodMacros(src.from, src.qty) });
     openSheet('prompt', { text, back: sh });
   },
 

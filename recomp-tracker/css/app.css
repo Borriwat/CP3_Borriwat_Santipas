@@ -1072,6 +1072,37 @@ table.t td {
   border-top: 1px solid var(--line);
   text-align: right;
 }
+/* ---------- Tappable meal names ---------- */
+/* a long name wraps; the status tag and buttons beside it keep their shape */
+.meal-title > .row {
+  flex: none;
+}
+.meal-title .pill {
+  white-space: nowrap;
+}
+.name-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 8px 0;
+  margin: -8px 0; /* bigger tap area without changing the layout */
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.name-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--muted);
+}
+
 /* ---------- AI photo logging ---------- */
 .photo-preview {
   display: block;

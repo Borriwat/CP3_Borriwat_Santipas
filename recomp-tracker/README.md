@@ -50,11 +50,18 @@ No plan file? Tap **Set up from my body stats** to get targets from the calculat
 
 | Tab | What it does |
 |---|---|
-| **Today** | Day type (Rest / Lift / Cardio / Lift+Cardio), calorie ring and macro bars, your meals with **Log as planned**, snacks, water, supplements, cardio, weight, sleep, notes. |
+| **Today** | Day type (Rest / Lift / Cardio / Lift+Cardio), calorie ring and macro bars, your meals with **Log as planned** (tap a meal's name to rename it), snacks, water, supplements, cardio, weight, sleep, notes. |
 | **Plan** | Browse your menus per day type, edit targets, shopping list for the next 7 days, resize the menu when targets change. |
 | **Train** | Today's session, set by set. Last-time numbers and hints, a rest timer that starts when you tick a set, and the screen is kept awake where your iPhone allows it. |
 | **Progress** | Weight with 7-day average, measurements, the last 14 days at a glance, strength per exercise, and the **bi-weekly review**. |
 | **More** | Menu / gym-or-home choice, schedule, calculator, supplements, reminders, backup, theme. |
+
+**Renaming meals.** Training later today, so your "Pre-workout" meal is really breakfast?
+Tap the meal's name (it has a small pencil), pick a name or type your own, and choose
+**Just today** or **Every day**. Only the name changes: what is planned for that meal
+and anything you logged stay put, and the day's targets are unchanged. "Every day" also
+renames it on the Plan tab and on past days. A name you set for one day still wins on
+that day, and **Use "…"** takes a rename off again.
 
 **Eating off-plan.** Add what you ate (search, **photo**, quick-add macros, or your own
 foods). If you end up over or under, the **Rebalance** banner resizes the meals you still
@@ -166,11 +173,11 @@ private repo, so you'd host the app elsewhere).
 
 ```bash
 cd recomp-tracker
-npm test                  # 110 unit tests, Node only, no dependencies
+npm test                  # 120 unit tests, Node only, no dependencies
 npm run serve             # http://localhost:8080  (needs http-server: npx will fetch it)
 npm run build             # regenerates sw.js, REQUIRED after changing any shipped file
 npm run check             # fails if sw.js is stale (also enforced by a unit test)
-npm run e2e               # 73 browser checks (needs: npm i --no-save playwright)
+npm run e2e               # 82 browser checks (needs: npm i --no-save playwright)
 node tools/make-icons.mjs # regenerate the PNG icons from icons/icon.svg
 ```
 
@@ -196,6 +203,9 @@ Design decisions worth knowing:
   rewrite past adherence.
 - Plan files are untrusted input: ids are validated, all text is escaped, and long
   unbroken text wraps instead of breaking the layout (all covered by tests).
+- Meal names are display names only: a meal keeps its slot id, so planned foods, logged
+  entries and day targets never depend on what it is called. Names are tidied on the way in
+  and again when a backup is restored (`js/core/state.js`).
 - AI replies are untrusted too: they are parsed against a schema, numbers are capped to
   what a plate could hold, and every string is escaped (`js/core/ai.js`, tested with
   hostile replies). The photo flow is tested against a pretend Anthropic server, so the

@@ -4,6 +4,7 @@ import { ui, getStore, todayISO, latestWeight } from './ctx.js';
 import { addFoodSheet, entrySheet, plannedItemSheet, swapSheet, rebalanceSheet, promptSheet } from './sheets-food.js';
 import { pickSessionSheet } from './train.js';
 import { aiKeySheet } from './sheets-photo.js';
+import { renameMealSheet } from './sheets-meal.js';
 import { calculate } from '../core/tdee.js';
 import { DAY_TYPES, DAY_TYPE_LABEL } from '../core/tdee.js';
 import { TIMINGS } from '../core/plan.js';
@@ -308,6 +309,7 @@ const SHEETS = {
   rebalance: rebalanceSheet,
   prompt: promptSheet,
   aiKey: aiKeySheet,
+  renameMeal: renameMealSheet,
   cardio: cardioSheet,
   supplements: supplementsSheet,
   targets: targetsSheet,

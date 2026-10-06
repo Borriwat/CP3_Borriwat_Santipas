@@ -13,6 +13,7 @@ import { renderMore, actions as moreA, changes as moreC } from './ui/more.js';
 import { renderWelcome, actions as welcomeA } from './ui/welcome.js';
 import { sheetActions, sheetChanges, inputs as sheetInputs } from './ui/sheet-actions.js';
 import { photoActions, photoChanges, photoInputs } from './ui/sheets-photo.js';
+import { mealActions } from './ui/sheets-meal.js';
 
 const TABS = [
   ['today', 'Today', 'today'],
@@ -24,7 +25,7 @@ const TABS = [
 const VIEWS = { today: renderToday, plan: renderPlan, train: renderTrain, progress: renderProgress, more: renderMore };
 
 const ACTIONS = {
-  ...todayA, ...planA, ...trainA, ...progressA, ...moreA, ...welcomeA, ...sheetActions, ...photoActions,
+  ...todayA, ...planA, ...trainA, ...progressA, ...moreA, ...welcomeA, ...sheetActions, ...photoActions, ...mealActions,
   tab: (el) => {
     ui.tab = el.dataset.v;
     releaseSheet();

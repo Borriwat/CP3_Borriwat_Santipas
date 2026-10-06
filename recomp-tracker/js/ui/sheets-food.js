@@ -5,7 +5,7 @@ import { searchFoods, sortRecent } from '../core/foods.js';
 import { foodMacros, macros, kcalOf, entryMacros, diff, round, sumMacros } from '../core/macros.js';
 import { swapFood, suggestSwaps } from '../core/swap.js';
 import { rebalanceMeals } from '../core/scale.js';
-import { slotLabel } from '../core/plan.js';
+import { mealLabel } from '../core/state.js';
 import { offPlanPrompt } from '../core/prompts.js';
 import { n0, n1, qtyText, signed, parseNum } from '../core/format.js';
 import { photoTab } from './sheets-photo.js';
@@ -20,7 +20,7 @@ export function addFoodSheet(sh) {
   const index = foodIndex();
   const s = getState();
   const recent = sortRecent(Object.entries(s.days).map(([d, v]) => [d, v.entries]));
-  const label = slotLabel(s.plan, sh.slot);
+  const label = mealLabel(s, sh.date, sh.slot);
   const tabs = seg('sheet-tab', [['search', 'Search'], ['photo', 'Photo'], ['quick', 'Quick add'], ['new', 'New food']], sh.tab);
   let body;
   let foot = null;

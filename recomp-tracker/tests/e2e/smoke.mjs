@@ -918,6 +918,169 @@ console.log('\nAI photo logging');
   await sw.ctx.close();
 }
 
+console.log('\nRenaming meals');
+{
+  const { ctx, page } = await newPage();
+  await loadExample(page);
+  const title = (slot) => page.locator(`[data-key="meal-${slot}"] h3`).innerText();
+  const openRename = async (slot) => {
+    await page.click(`[data-key="meal-${slot}"] .name-btn`);
+    await page.waitForSelector('.sheet input[data-field="name"]');
+  };
+  const closeIt = async () => {
+    await page.click('.sheet-head [data-act="sheet-close"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+  };
+  const days = async () => (await state(page)).days;
+
+  await check('tapping a meal name opens the rename sheet with its current name and sensible defaults', async () => {
+    eq(await title('pre'), 'Pre-workout');
+    await openRename('pre');
+    eq(await page.locator('.sheet-head h2').innerText(), 'Rename meal');
+    eq(await page.inputValue('.sheet input[data-field="name"]'), 'Pre-workout');
+    ok((await page.locator('.sheet .chips .chip').count()) >= 6, 'no quick suggestions');
+    eq(await page.locator('.sheet [data-act="meal-scope"][aria-pressed="true"]').innerText(), 'Just today');
+    eq(await page.locator('[data-act="meal-name-reset"]').count(), 0, 'reset offered although nothing was renamed');
+    eq(await page.locator('[data-act="meal-name-save"]').isEnabled(), true);
+  });
+
+  await check('a blank name cannot be saved, and closing the sheet changes nothing', async () => {
+    await page.fill('.sheet input[data-field="name"]', '   ');
+    eq(await page.locator('[data-act="meal-name-save"]').isDisabled(), true);
+    await closeIt();
+    eq(await title('pre'), 'Pre-workout');
+    eq(JSON.stringify((await state(page)).prefs.mealNames), '{}');
+  });
+
+  await check('Pre-workout becomes Breakfast for today only: same meal, same foods, other days untouched', async () => {
+    const itemsBefore = await page.locator('[data-key="meal-pre"] [data-act="planned-item"]').count();
+    await openRename('pre');
+    await page.click('.sheet .chip:has-text("Breakfast")');
+    eq(await page.inputValue('.sheet input[data-field="name"]'), 'Breakfast');
+    await page.click('[data-act="meal-name-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    ok(/Meal is now “Breakfast”/.test(await page.locator('.toast').innerText()));
+    eq(await title('pre'), 'Breakfast');
+    eq(await page.locator('[data-key="meal-pre"] [data-act="planned-item"]').count(), itemsBefore, 'the planned foods changed');
+    eq(await page.locator('[data-key="meal-pre"] .pill').first().innerText(), 'Planned');
+    await page.click('[data-act="day-next"]');
+    await page.waitForSelector('[data-key="meal-pre"]');
+    ok(['Pre-workout', 'Breakfast'].includes(await title('pre')));
+    const tomorrowType = await page.locator('.seg.tight button[aria-pressed="true"]').first().innerText();
+    // tomorrow may be a rest day (no "pre" meal): either way it must not be called Breakfast because of today
+    if (await page.locator('[data-key="meal-pre"]').count()) eq(await title('pre'), 'Pre-workout', `tomorrow (${tomorrowType}) was renamed too`);
+    await page.click('[data-act="day-today"]');
+    eq(await title('pre'), 'Breakfast');
+    const st = await state(page);
+    eq(JSON.stringify(st.prefs.mealNames), '{}');
+    eq(Object.values(st.days)[0].mealNames.pre, 'Breakfast');
+  });
+
+  await check('the new name is used in Add food, in the logged toast and in the AI prompt; logging still goes to the same meal', async () => {
+    await page.click('[data-key="meal-pre"] [data-act="add-food"]');
+    eq(await page.locator('.sheet-head h2').innerText(), 'Add to Breakfast');
+    await closeIt();
+    await page.click('[data-key="meal-pre"] [data-act="ask-claude"]');
+    ok(/what I ate for Breakfast/.test(await page.locator('.sheet').innerText()), 'prompt still says Pre-workout');
+    await closeIt();
+    await page.click('[data-key="meal-pre"] [data-act="log-planned"]');
+    await page.waitForSelector('[data-key="meal-pre"] .pill.ok');
+    ok(/Breakfast logged/.test(await page.locator('.toast').innerText()));
+    const entries = Object.values(await days())[0].entries;
+    ok(entries.length > 0 && entries.every((e) => e.slot === 'pre'), 'entries moved to another slot');
+    eq(await title('pre'), 'Breakfast');
+  });
+
+  await check('renaming for every day changes every day and the Plan tab; a one-day name still wins on its day', async () => {
+    await openRename('lunch');
+    await page.fill('.sheet input[data-field="name"]', 'Big lunch');
+    await page.click('.sheet [data-act="meal-scope"][data-v="always"]');
+    ok(/including past days and the Plan tab/.test(await page.locator('.sheet').innerText()));
+    await page.click('[data-act="meal-name-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq(await title('lunch'), 'Big lunch');
+    eq((await state(page)).prefs.mealNames.lunch, 'Big lunch');
+    await page.click('[data-act="day-prev"]');
+    await page.waitForSelector('[data-key="meal-lunch"]');
+    eq(await title('lunch'), 'Big lunch', 'yesterday was not renamed');
+    await page.click('[data-act="day-today"]');
+    await page.click('[data-act="tab"][data-v="plan"]');
+    await page.waitForSelector('[data-key="pl-lunch"]');
+    eq(await page.locator('[data-key="pl-lunch"] h3').innerText(), 'Big lunch', 'the Plan tab kept the old name');
+    await page.click('[data-act="tab"][data-v="today"]');
+    await openRename('lunch');
+    await page.fill('.sheet input[data-field="name"]', 'Midday');
+    await page.click('[data-act="meal-name-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq(await title('lunch'), 'Midday');
+    await page.click('[data-act="day-prev"]');
+    await page.waitForSelector('[data-key="meal-lunch"]');
+    eq(await title('lunch'), 'Big lunch');
+    await page.click('[data-act="day-today"]');
+  });
+
+  await check('"Use ..." removes a rename step by step: first the one-day name, then the every-day name', async () => {
+    await openRename('lunch');
+    eq(await page.locator('[data-act="meal-name-reset"]').innerText(), 'Use “Big lunch”');
+    await page.click('[data-act="meal-name-reset"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq(await title('lunch'), 'Big lunch');
+    await openRename('lunch');
+    await page.click('.sheet [data-act="meal-scope"][data-v="always"]');
+    eq(await page.locator('[data-act="meal-name-reset"]').innerText(), 'Use “Lunch”');
+    await page.click('[data-act="meal-name-reset"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq(await title('lunch'), 'Lunch');
+    eq(JSON.stringify((await state(page)).prefs.mealNames), '{}');
+  });
+
+  await check('the Snacks card can be renamed too', async () => {
+    await page.click('.name-btn[data-slot="extra"]');
+    await page.fill('.sheet input[data-field="name"]', 'Dessert');
+    await page.click('[data-act="meal-name-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq(await page.locator('.name-btn[data-slot="extra"]').innerText(), 'Dessert');
+    await page.click('[data-act="add-food"][data-slot="extra"]');
+    eq(await page.locator('.sheet-head h2').innerText(), 'Add to Dessert');
+    await closeIt();
+  });
+
+  await check('names survive a reload and are included in a backup', async () => {
+    await page.waitForTimeout(600);
+    await page.reload();
+    await page.waitForSelector('.tabbar');
+    eq(await title('pre'), 'Breakfast');
+    await page.click('[data-act="tab"][data-v="more"]');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="backup-export"]')]);
+    const backup = JSON.parse(await readFile(await dl.path(), 'utf8'));
+    eq(Object.values(backup.state.days)[0].mealNames.pre, 'Breakfast');
+    await page.click('[data-act="tab"][data-v="today"]');
+  });
+
+  await check('a hostile or very long name is shown as plain text and cannot widen the screen', async () => {
+    await openRename('dinner');
+    await page.fill('.sheet input[data-field="name"]', '<img src=x onerror="window.__x=1">');
+    await page.click('[data-act="meal-name-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    eq(await title('dinner'), '<img src=x onerror="window.__x=1">');
+    eq(await page.evaluate(() => window.__x), undefined, 'markup in a meal name ran');
+    eq(await page.locator('[data-key="meal-dinner"] img').count(), 0);
+    await openRename('dinner');
+    await page.fill('.sheet input[data-field="name"]', 'W'.repeat(80));
+    eq((await page.inputValue('.sheet input[data-field="name"]')).length, 40, 'the box accepts more than 40 characters');
+    await page.click('[data-act="meal-name-save"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    ok(over <= 1, `a long meal name widened the page by ${over}px`);
+    eq((await title('dinner')).length, 40);
+    const tag = await page.locator('[data-key="meal-dinner"] .meal-title .pill').first().evaluate((el) => el.getBoundingClientRect().height);
+    ok(tag < 40, `the status tag was squeezed onto several lines (${tag}px tall)`);
+  });
+
+  eq(page.errors.filter((e) => !/Failed to load resource|net::/.test(e)).length, 0, 'console errors: ' + page.errors.join('; '));
+  await ctx.close();
+}
+
 console.log('\nOffline & PWA');
 {
   const { ctx, page } = await newPage({ serviceWorkers: 'allow' });

@@ -3,11 +3,12 @@ import { icon, seg, macroLine } from './components.js';
 import { ui, mutate, openSheet, toast, render, getStore, foodIndex, todayISO } from './ctx.js';
 import { DAY_TYPES, DAY_TYPE_LABEL, DAY_TYPE_SHORT } from '../core/tdee.js';
 import { resolveDayType } from '../core/schedule.js';
-import { targetsOn, menuDayTotals, menuSlotItems, slotsFor, slotLabel } from '../core/plan.js';
+import { targetsOn, menuDayTotals, menuSlotItems, slotsFor } from '../core/plan.js';
 import { rescaleMenu } from '../core/scale.js';
 import { shoppingList } from '../core/grocery.js';
 import { itemsMacros } from './ctx.js';
 import { n0, qtyText } from '../core/format.js';
+import { everydayMealLabel } from '../core/state.js';
 
 const state = () => getStore().state;
 
@@ -57,7 +58,7 @@ export function renderPlan() {
         ? slots.map((slot) => {
             const items = menuSlotItems(plan, s.prefs.menu, type, slot);
             const m = itemsMacros(items, index);
-            return html`<section class="card" data-key="pl-${slot}"><div class="meal-title"><h3>${slotLabel(plan, slot)}</h3></div>
+            return html`<section class="card" data-key="pl-${slot}"><div class="meal-title"><h3>${everydayMealLabel(s, slot)}</h3></div>
               <div style="margin:6px 0">${macroLine(m)}</div>
               <div class="list">${items.map((it) => {
                 const f = index.get(it.foodId);

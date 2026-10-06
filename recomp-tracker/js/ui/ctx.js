@@ -2,9 +2,9 @@
 // view-model for a day.
 
 import { buildFoodIndex } from '../core/foods.js';
-import { getDay } from '../core/state.js';
+import { getDay, mealLabel } from '../core/state.js';
 import { resolveDayType, programDayKey } from '../core/schedule.js';
-import { targetsOn, menuSlotItems, slotsFor, slotLabel } from '../core/plan.js';
+import { targetsOn, menuSlotItems, slotsFor } from '../core/plan.js';
 import { dayTotals } from '../core/stats.js';
 import { sumMacros, foodMacros, diff, entryMacros } from '../core/macros.js';
 
@@ -111,7 +111,7 @@ export function mealModel(s, date, type, slot, index) {
   const template = menuSlotItems(s.plan, s.prefs.menu, type, slot);
   return {
     slot,
-    label: slotLabel(s.plan, slot),
+    label: mealLabel(s, date, slot),
     items,
     planned,
     adjusted: !!day?.adjust?.[slot],
