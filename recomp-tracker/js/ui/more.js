@@ -3,13 +3,13 @@ import { icon, seg, banner } from './components.js';
 import { ui, mutate, openSheet, toast, getStore, todayISO, latestWeight } from './ctx.js';
 import { DAY_TYPES, DAY_TYPE_LABEL } from '../core/tdee.js';
 import { targetsOn } from '../core/plan.js';
-import { exportState, parseBackup, defaultState } from '../core/state.js';
+import { exportState, parseBackup, defaultState, setMealMode, usesPlannedMeals } from '../core/state.js';
 import { buildReminders } from '../core/ics.js';
 import { programDayKey, cycleIndex } from '../core/schedule.js';
 import { n0, n1, parseNum } from '../core/format.js';
 import { aiSettingsCard, keys } from './sheets-photo.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 const state = () => getStore().state;
 
 export function renderMore() {
@@ -30,6 +30,8 @@ export function renderMore() {
     <section class="card"><div class="card-head"><h2>My plan</h2><span class="pill">${plan.phase}</span></div>
       <div class="bold">${plan.name}</div>${plan.source ? html`<div class="tiny muted">${plan.source}</div>` : ''}
       <div class="stack" style="margin-top:12px">
+        ${menuIds.length ? html`<div class="field"><span class="small muted bold">Meals on Today</span>${seg('meal-mode', [['planned', 'Planned menu'], ['blank', 'Start blank']], usesPlannedMeals(s) ? 'planned' : 'blank')}
+          <div class="tiny muted" style="margin-top:4px">${usesPlannedMeals(s) ? 'Meals come pre-filled from your menu. Choose “Start blank” to log your own food instead.' : 'Meals start empty and you log your own food. Your daily targets stay exactly the same, and your menu is kept on the Plan tab for reference.'}</div></div>` : ''}
         ${menuIds.length > 1 ? html`<div class="field"><span class="small muted bold">Meal menu</span>${seg('plan-menu', menuIds.map((id) => [id, plan.menus[id].label]), s.prefs.menu)}</div>` : ''}
         ${editions.length > 1 ? html`<div class="field"><span class="small muted bold">Training edition</span>${seg('set-edition', editions.map(([k, v]) => [k, v.label]), s.prefs.edition)}</div>` : ''}
         ${prog ? html`<div class="row between"><div><div class="bold">Program schedule</div><div class="small muted">Today is Day ${dayNo} · ${prog.days[programDayKey(plan, today, s.prefs.programAnchor)].label}</div></div><button class="btn sm" data-act="program-open">Change</button></div>` : ''}
@@ -103,6 +105,7 @@ export const actions = {
       },
     });
   },
+  'meal-mode': (el) => mutate((s) => setMealMode(s, el.dataset.v)),
   'food-del': (el) => mutate((s) => { s.customFoods = s.customFoods.filter((f) => f.id !== el.dataset.id); }),
   theme: (el) => mutate((s) => { s.prefs.theme = el.dataset.v; }),
   'sound-toggle': () => mutate((s) => { s.prefs.sound = s.prefs.sound === false; }),

@@ -1081,6 +1081,121 @@ console.log('\nRenaming meals');
   await ctx.close();
 }
 
+console.log('\nStart-blank meals');
+{
+  const { ctx, page } = await newPage();
+  await loadExample(page);
+  const macroRows = () => page.locator('.macro-row').allInnerTexts();
+  const plannedItems = () => page.locator('[data-act="planned-item"]').count();
+  const goMore = () => page.click('[data-act="tab"][data-v="more"]');
+  const goToday = () => page.click('[data-act="tab"][data-v="today"]');
+  let targetKcal;
+  let targetRows;
+
+  await check('by default meals come pre-filled, and More has a "Meals on Today" switch set to Planned menu', async () => {
+    ok((await plannedItems()) >= 6, 'the plan should be on Today by default');
+    eq(await page.locator('[data-act="log-planned"]').count(), 4);
+    targetKcal = await kcalTarget(page);
+    targetRows = await macroRows();
+    await goMore();
+    ok(/Meals on Today/.test(await page.locator('main').innerText()));
+    eq(await page.locator('[data-act="meal-mode"][aria-pressed="true"]').innerText(), 'Planned menu');
+  });
+
+  await check('"Start blank": every meal is empty, nothing to "log as planned", the targets are exactly the same', async () => {
+    await page.click('[data-act="meal-mode"][data-v="blank"]');
+    ok(/Meals start empty and you log your own food/.test(await page.locator('main').innerText()));
+    await goToday();
+    eq(await plannedItems(), 0, 'planned foods are still shown');
+    eq(await page.locator('[data-act="log-planned"]').count(), 0);
+    eq(await page.locator('[data-key^="meal-"]').count(), 4, 'the meals themselves should still be there');
+    eq(await page.locator('[data-key^="meal-"]').evaluateAll((els) => els.filter((e) => /Nothing logged yet/.test(e.innerText)).length), 4);
+    eq(await page.locator('[data-key^="meal-"] .pill:text-is("Empty")').count(), 4);
+    eq(await page.locator('[data-key^="meal-"] [data-act="add-food"]').count(), 4);
+    eq(await page.locator('[data-act="rebalance-open"]').count(), 0);
+    eq(await kcalTarget(page), targetKcal, 'calorie target changed');
+    eq(JSON.stringify(await macroRows()), JSON.stringify(targetRows), 'macro targets changed');
+    eq(await kcalEaten(page), 0);
+  });
+
+  await check('logging your own food from an empty meal works and counts toward the same target', async () => {
+    await page.click('[data-key="meal-lunch"] [data-act="add-food"]');
+    await page.click('[data-act="sheet-tab"][data-v="quick"]');
+    await page.fill('input[data-field="quick.name"]', 'Chicken salad');
+    await page.fill('input[data-field="quick.p"]', '40');
+    await page.fill('input[data-field="quick.c"]', '30');
+    await page.fill('input[data-field="quick.f"]', '15');
+    await page.click('[data-act="quick-add"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    await page.waitForSelector('[data-key="meal-lunch"] .pill.ok');
+    eq(await kcalEaten(page), 40 * 4 + 30 * 4 + 15 * 9);
+    eq(await kcalTarget(page), targetKcal);
+    const card = await page.locator('[data-key="meal-lunch"]').innerText();
+    ok(/Chicken salad/.test(card) && !/vs plan/.test(card), 'a hand-logged meal should not be compared with a plan');
+    eq(await plannedItems(), 0);
+    const entry = Object.values((await state(page)).days)[0].entries[0];
+    eq(entry.slot, 'lunch');
+    eq(entry.p, 40);
+  });
+
+  await check('the AI helper text does not mention a plan that is not in use', async () => {
+    await page.click('[data-key="meal-dinner"] [data-act="ask-claude"]');
+    const text = await page.locator('#prompt-text').innerText();
+    ok(/what I ate for Dinner\./.test(text) && /My targets for today:/.test(text), text.slice(0, 200));
+    ok(!/instead of the plan|supposed to give me|planned as/.test(text), 'the prompt still talks about a plan');
+    await page.click('.sheet-head [data-act="sheet-close"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+  });
+
+  await check('the Plan tab says why, keeps the menu for reference, and offers to switch back', async () => {
+    await page.click('[data-act="tab"][data-v="plan"]');
+    const t = await page.locator('main').innerText();
+    ok(/Your meals start blank on Today/.test(t));
+    ok((await page.locator('[data-key^="pl-"]').count()) >= 3, 'the menu itself should still be listed');
+  });
+
+  await check('the choice survives a reload and is part of a backup', async () => {
+    await page.waitForTimeout(600);
+    await page.reload();
+    await page.waitForSelector('.tabbar');
+    await goToday();
+    eq(await plannedItems(), 0);
+    eq(await kcalTarget(page), targetKcal);
+    await goMore();
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="backup-export"]')]);
+    eq(JSON.parse(await readFile(await dl.path(), 'utf8')).state.prefs.mealMode, 'blank');
+  });
+
+  await check('switching back to the planned menu restores the foods and keeps everything you logged', async () => {
+    await page.click('[data-act="tab"][data-v="plan"]');
+    await page.click('[data-act="meal-mode"][data-v="planned"]');
+    await goToday();
+    ok((await plannedItems()) >= 4, 'planned foods did not come back');
+    await page.waitForSelector('[data-key="meal-lunch"] .pill.ok');
+    ok(/Chicken salad/.test(await page.locator('[data-key="meal-lunch"]').innerText()), 'a logged meal was lost');
+    eq(await kcalEaten(page), 40 * 4 + 30 * 4 + 15 * 9);
+    eq(await kcalTarget(page), targetKcal);
+    await goMore();
+    eq(await page.locator('[data-act="meal-mode"][aria-pressed="true"]').innerText(), 'Planned menu');
+  });
+
+  await check('a plan with no menus has nothing to switch, and its meals are simply empty', async () => {
+    const p2 = await newPage();
+    await p2.page.goto(BASE);
+    await p2.page.click('[data-act="calc-welcome"]');
+    for (const [k, v] of [['age', '30'], ['heightCm', '178'], ['weightKg', '78'], ['bfPct', '18']]) await p2.page.fill(`input[data-input="calc-field"][data-k="${k}"]`, v);
+    await p2.page.click('[data-act="calc-create"]');
+    await p2.page.waitForSelector('.tabbar');
+    eq(await p2.page.locator('[data-act="planned-item"]').count(), 0);
+    await p2.page.click('[data-act="tab"][data-v="more"]');
+    eq(await p2.page.locator('[data-act="meal-mode"]').count(), 0, 'a switch is shown although there is no menu');
+    await p2.ctx.close();
+  });
+
+  eq(page.errors.filter((e) => !/Failed to load resource|net::/.test(e)).length, 0, 'console errors: ' + page.errors.join('; '));
+  await ctx.close();
+}
+
 console.log('\nOffline & PWA');
 {
   const { ctx, page } = await newPage({ serviceWorkers: 'allow' });

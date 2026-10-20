@@ -26,6 +26,7 @@ export function defaultState(today) {
       weighTime: '07:00',
       sex: 'M',
       mealNames: {}, // slot -> name, for every day
+      mealMode: 'planned', // 'planned': Today shows the plan's menu. 'blank': every meal starts empty
     },
     days: {},
     measurements: [],
@@ -91,6 +92,17 @@ export function setTargets(state, from, targets) {
 export function setProgramDay(state, today, n) {
   const len = state.plan?.program?.cycle?.length;
   if (len) state.prefs.programAnchor = anchorForDay(today, n, len);
+}
+
+// ---- Meal mode -------------------------------------------------------------
+// 'blank' hides the planned foods on Today so meals start empty and the person
+// logs their own food. Nothing is deleted (the plan and its menus stay in the
+// app) and the daily targets are exactly the same in both modes.
+
+export const MEAL_MODES = ['planned', 'blank'];
+export const usesPlannedMeals = (state) => state.prefs.mealMode !== 'blank';
+export function setMealMode(state, mode) {
+  state.prefs.mealMode = MEAL_MODES.includes(mode) ? mode : 'planned';
 }
 
 // ---- Meal names ------------------------------------------------------------
@@ -355,6 +367,7 @@ export function parseBackup(text, today) {
   merged.days = s.days && typeof s.days === 'object' ? s.days : {};
   for (const k of Object.keys(merged.days)) merged.days[k] = { ...blankDay(), ...merged.days[k], mealNames: cleanMealNames(merged.days[k]?.mealNames) };
   merged.prefs.mealNames = cleanMealNames(merged.prefs.mealNames);
+  if (!MEAL_MODES.includes(merged.prefs.mealMode)) merged.prefs.mealMode = 'planned';
   for (const k of ['measurements', 'customFoods', 'reviews', 'targetHistory']) if (!Array.isArray(merged[k])) merged[k] = [];
   merged.v = STATE_VERSION;
   return { ok: true, state: merged };

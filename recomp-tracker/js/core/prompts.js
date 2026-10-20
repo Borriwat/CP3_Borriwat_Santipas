@@ -23,16 +23,16 @@ export function swapPrompt({ slotLabel, from, fromQty, toName, macros }) {
 
 const dominant = (m) => (m.p >= m.c && m.p >= m.f ? 'protein' : m.c >= m.f ? 'carbs' : 'fat');
 
-export function offPlanPrompt({ slotLabel, plannedItems, planned, target, eaten, remaining, upcoming }) {
+export function offPlanPrompt({ slotLabel, plannedItems, planned, target, eaten, remaining, upcoming, blank = false }) {
   const lines = [
-    `The attached photo is what I ate for ${slotLabel} instead of the plan.`,
+    blank ? `The attached photo is what I ate for ${slotLabel}.` : `The attached photo is what I ate for ${slotLabel} instead of the plan.`,
     '',
-    'My plan for today:',
+    blank ? 'My targets for today:' : 'My plan for today:',
     line('  Daily target', target),
     line('  Eaten so far (before this meal)', eaten),
     line('  Left for the day', remaining),
   ];
-  if (plannedItems?.length) {
+  if (!blank && plannedItems?.length) {
     lines.push(`  This meal was planned as: ${plannedItems.join(', ')} (${n0(planned.p)} P / ${n0(planned.c)} C / ${n0(planned.f)} F)`);
   }
   if (upcoming?.length) lines.push(`  Meals still to eat: ${upcoming.join(', ')}`);
@@ -41,8 +41,10 @@ export function offPlanPrompt({ slotLabel, plannedItems, planned, target, eaten,
     'Please:',
     '1. Estimate the weight of each item in the photo (ask me if something is unclear).',
     '2. Calculate protein, carbs, fat and calories using USDA FoodData Central.',
-    '3. Compare with what this meal was supposed to give me.',
-    '4. Tell me how to change my remaining meals today (which foods, how many grams) so the day lands within about 5-10 g of each macro target.'
+    blank ? '3. Tell me how this meal fits into what I have left for today.' : '3. Compare with what this meal was supposed to give me.',
+    blank
+      ? '4. If it helps, suggest what I could eat for my remaining meals (which foods, how many grams) so the day lands within about 5-10 g of each macro target.'
+      : '4. Tell me how to change my remaining meals today (which foods, how many grams) so the day lands within about 5-10 g of each macro target.'
   );
   return lines.join('\n');
 }

@@ -8,7 +8,7 @@ import { rescaleMenu } from '../core/scale.js';
 import { shoppingList } from '../core/grocery.js';
 import { itemsMacros } from './ctx.js';
 import { n0, qtyText } from '../core/format.js';
-import { everydayMealLabel } from '../core/state.js';
+import { everydayMealLabel, usesPlannedMeals } from '../core/state.js';
 
 const state = () => getStore().state;
 
@@ -48,6 +48,9 @@ export function renderPlan() {
   return html`<main class="screen">
     <div class="page-head"><div><h1>Plan</h1><div class="small muted">${plan.name}</div></div><button class="btn sm" data-act="targets-open">Edit targets</button></div>
     <div class="stack">
+      ${!usesPlannedMeals(s) && menuIds.length ? html`<div class="banner info">${icon('info')}<div class="grow"><b>Your meals start blank on Today.</b>
+        <div class="small">You chose to log your own food, so this menu is only for reference. Your daily targets are the same.</div>
+        <button class="btn sm" style="margin-top:8px" data-act="meal-mode" data-v="planned">Show this menu on Today</button></div></div>` : ''}
       ${menuIds.length > 1 ? seg('plan-menu', menuIds.map((id) => [id, plan.menus[id].label]), s.prefs.menu) : ''}
       ${seg('plan-type', DAY_TYPES.map((t) => [t, DAY_TYPE_SHORT[t]]), type, 'tight')}
       <div class="card"><div class="row between"><div><div class="small muted bold">${DAY_TYPE_LABEL[type]} day target</div><div style="font-size:24px;font-weight:700">${n0(tg.kcal)} <span class="muted small">kcal</span></div></div>${macroLine({ ...tg })}</div></div>

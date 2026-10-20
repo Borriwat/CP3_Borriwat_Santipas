@@ -116,6 +116,7 @@ function mealCard(m, meal) {
   const shown = logged ? meal.logged : meal.planned;
   const d = logged ? diff(meal.logged, meal.planned) : null;
   const canLog = !logged && meal.items.length > 0;
+  const blank = !S.usesPlannedMeals(m.s); // meals start empty; the person logs their own food
   return html`<section class="card" style="margin-top:12px" data-key="meal-${meal.slot}">
     <div class="meal-title">
       <h3>${nameButton(meal.slot, meal.label)}</h3>
@@ -125,7 +126,9 @@ function mealCard(m, meal) {
         ${logged ? html`<button class="btn sm ghost icon" data-act="unlog-meal" data-slot="${meal.slot}" aria-label="Clear this meal" title="Clear this meal">${icon('trash')}</button>` : meal.adjusted ? html`<button class="btn sm ghost icon" data-act="reset-adjust" data-slot="${meal.slot}" aria-label="Reset to the original plan" title="Reset to the original plan">${icon('x')}</button>` : ''}
       </div>
     </div>
-    <div style="margin:6px 0 4px">${macroLine(shown)}</div>
+    ${blank && !logged
+      ? html`<div class="small muted" style="margin:6px 0 4px">Nothing logged yet.</div>`
+      : html`<div style="margin:6px 0 4px">${macroLine(shown)}</div>`}
     ${logged && meal.items.length ? html`<div class="tiny muted">vs plan: P ${signed(d.p)} · C ${signed(d.c)} · F ${signed(d.f)} · ${signed(d.kcal)} kcal</div>` : ''}
     <div class="list" style="margin-top:6px">
       ${logged
