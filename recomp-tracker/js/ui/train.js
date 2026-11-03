@@ -2,7 +2,7 @@ import { html } from './dom.js';
 import { icon, seg } from './components.js';
 import { ui, mutate, openSheet, render, getStore, viewDate, todayISO } from './ctx.js';
 import { programDayKey } from '../core/schedule.js';
-import { exercisesFor, SET_TYPES } from '../core/plan.js';
+import { exercisesFor, SET_TYPES, programList, editionFor } from '../core/plan.js';
 import { lastPerformance, nextHint, sessionVolume, isWorkingSet } from '../core/stats.js';
 import { n0, parseNum } from '../core/format.js';
 import { prettyDate } from '../core/dates.js';
@@ -28,14 +28,17 @@ export function renderTrain() {
   const day = s.days[date] || {};
   const w = day.workout;
   const key = w?.dayKey || programDayKey(s.plan, date, s.prefs.programAnchor);
-  const def = prog.days[key];
+  // a workout saved under another program still opens after you switch programs
+  const def = prog.days[key] || { label: w?.dayLabel || key, dayType: 'lift' };
   const editions = Object.entries(prog.editions);
-  const edition = w?.edition || s.prefs.edition;
+  const edition = w?.edition || editionFor(prog, s.prefs.edition);
   const idx = prog.cycle.indexOf(key) + 1;
+  const progs = programList(s.plan);
 
   return html`<main class="screen ${ui.timer ? 'has-timer' : ''}">
-    <div class="page-head"><div><h1>${def.label}</h1><div class="small muted">${prettyDate(date, todayISO())} · Day ${idx} of ${prog.cycle.length}</div></div>
+    <div class="page-head"><div><h1>${def.label}</h1><div class="small muted">${prettyDate(date, todayISO())}${progs.length > 1 ? ' · ' + prog.label : ''}${idx ? ` · Day ${idx} of ${prog.cycle.length}` : ''}</div></div>
       <button class="btn sm" data-act="program-open">Change day</button></div>
+    ${progs.length > 1 && !w ? html`<div style="margin-bottom:12px">${seg('program-pick', progs.map((p) => [p.id, p.label]), prog.id)}</div>` : ''}
     ${editions.length > 1 && !w ? html`<div style="margin-bottom:12px">${seg('set-edition', editions.map(([k, v]) => [k, v.label]), edition)}</div>` : ''}
     ${w ? activeWorkout(s, date, w) : preview(s, def, key, edition)}
     ${history(s, date)}
@@ -123,7 +126,7 @@ function history(s, date) {
   return html`<section class="card" style="margin-top:12px"><div class="card-head"><h2>Recent workouts</h2></div>
     <div class="list">${sessions.map(([d, v]) => {
       const sets = v.workout.exercises.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0);
-      return html`<div class="item" data-key="h-${d}"><div class="grow"><div class="title">${prog.days[v.workout.dayKey]?.label || v.workout.dayKey}</div><div class="sub">${prettyDate(d, todayISO())} · ${sets} sets</div></div><b>${n0(sessionVolume(v.workout))} kg</b></div>`;
+      return html`<div class="item" data-key="h-${d}"><div class="grow"><div class="title">${v.workout.dayLabel || prog.days[v.workout.dayKey]?.label || v.workout.dayKey}</div><div class="sub">${prettyDate(d, todayISO())} · ${sets} sets</div></div><b>${n0(sessionVolume(v.workout))} kg</b></div>`;
     })}</div></section>`;
 }
 
@@ -237,7 +240,8 @@ export async function syncWakeLock() {
 
 function restFor(w, exIdx, setIdx) {
   const ex = w.exercises[exIdx];
-  const planEx = exercisesFor(state().plan, w.edition, w.dayKey).find((p) => p.id === ex.id);
+  const wp = state().plan.programs?.[w.programId] || state().plan.program; // the program this workout was started from
+  const planEx = (wp?.editions?.[w.edition]?.days?.[w.dayKey] || []).find((p) => p.id === ex.id);
   const next = ex.sets[setIdx + 1];
   if (next) return next.type === 'drop' ? 10 : planEx?.rest ?? 90;
   return planEx?.restAfter ?? 0;

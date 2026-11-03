@@ -52,7 +52,7 @@ No plan file? Tap **Set up from my body stats** to get targets from the calculat
 |---|---|
 | **Today** | Day type (Rest / Lift / Cardio / Lift+Cardio), calorie ring and macro bars, your meals with **Log as planned** (tap a meal's name to rename it), snacks, water, supplements, cardio, weight, sleep, notes. |
 | **Plan** | Browse your menus per day type, edit targets, shopping list for the next 7 days, resize the menu when targets change. |
-| **Train** | Today's session, set by set. Last-time numbers and hints, a rest timer that starts when you tick a set, and the screen is kept awake where your iPhone allows it. |
+| **Train** | Today's session, set by set. Last-time numbers and hints, a rest timer that starts when you tick a set, and the screen is kept awake where your iPhone allows it. If your plan has several programs (for example PPL, ULU and FB3), a picker at the top switches between them. |
 | **Progress** | Weight with 7-day average, measurements, the last 14 days at a glance, strength per exercise, and the **bi-weekly review**. |
 | **More** | Menu / gym-or-home choice, schedule, calculator, supplements, reminders, backup, theme. |
 
@@ -69,6 +69,16 @@ them) and you log what you eat with *Add food*: search, photo, or quick add. You
 calorie and macro targets do not change at all. Your coach's menu is not deleted: it stays
 on the Plan tab for reference, and **Planned menu** brings it back to Today. Nothing you
 logged is lost when you switch either way.
+
+**Several training programs.** A plan can hold more than one program (the coach's PPL,
+ULU, FB3 ...). With two or more, a **PPL | ULU | FB3** picker appears at the top of
+*Train* (and under *More → Training program*). Switching asks first, then the new
+program starts today as its Day 1. Everything you already logged stays exactly as it
+was, including the numbers for the PPL exercises, so last-time hints keep working. See
+`docs/PLAN_FORMAT.md` for how to describe a program.
+
+**Photo on every meal.** Each meal card has a camera button: tap it, take or choose a
+photo, and the AI estimate (with your own Anthropic key; see below) lands in that meal.
 
 **Eating off-plan.** Add what you ate (search, **photo**, quick-add macros, or your own
 foods). If you end up over or under, the **Rebalance** banner resizes the meals you still
@@ -180,11 +190,11 @@ private repo, so you'd host the app elsewhere).
 
 ```bash
 cd recomp-tracker
-npm test                  # 130 unit tests, Node only, no dependencies
+npm test                  # 144 unit tests, Node only, no dependencies
 npm run serve             # http://localhost:8080  (needs http-server: npx will fetch it)
 npm run build             # regenerates sw.js, REQUIRED after changing any shipped file
 npm run check             # fails if sw.js is stale (also enforced by a unit test)
-npm run e2e               # 90 browser checks (needs: npm i --no-save playwright)
+npm run e2e               # 99 browser checks (needs: npm i --no-save playwright)
 node tools/make-icons.mjs # regenerate the PNG icons from icons/icon.svg
 ```
 

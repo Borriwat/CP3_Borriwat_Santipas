@@ -56,11 +56,19 @@ export function validatePlan(input) {
     slots: raw.slots || {},
     foods: Array.isArray(raw.foods) ? raw.foods : [],
     menus: raw.menus || {},
-    program: raw.program || null,
+    program: null, // the active program, filled in below
+    programs: {},
+    defaultProgram: null,
     supplements: Array.isArray(raw.supplements) ? raw.supplements : [],
     cardio: { weeklyKcalGoal: 0, met: 9.8, ...(raw.cardio || {}) },
     hydration: { goalMl: 3000, ...(raw.hydration || {}) },
   };
+
+  // Training programs: `program` is the main one, `programs` can list more to choose from.
+  const progs = normalizePrograms(raw, err);
+  plan.programs = progs.programs;
+  plan.defaultProgram = progs.defaultId;
+  plan.program = progs.defaultId ? progs.programs[progs.defaultId] : null;
 
   // Day types and targets
   for (const t of DAY_TYPES) {
@@ -117,15 +125,16 @@ export function validatePlan(input) {
   for (const id of Object.keys(plan.slots)) if (!isSafeId(id)) badId('Meal slot', id);
   for (const t of Object.values(plan.dayTypes)) for (const sl of t.slots) if (!isSafeId(sl)) badId('Meal slot', sl);
   for (const s of plan.supplements) if (s.id && !isSafeId(s.id)) badId('Supplement id', s.id);
-  if (plan.program) {
-    for (const k of plan.program.cycle || []) if (!isSafeId(k)) badId('Program day', k);
-    for (const [eid, ed] of Object.entries(plan.program.editions || {})) {
+  for (const prog of Object.values(plan.programs)) {
+    for (const k of prog.cycle || []) if (!isSafeId(k)) badId('Program day', k);
+    for (const [eid, ed] of Object.entries(prog.editions || {})) {
       if (!isSafeId(eid)) badId('Edition id', eid);
       for (const exs of Object.values(ed.days || {})) for (const ex of exs) if (ex.id && !isSafeId(ex.id)) badId('Exercise id', ex.id);
     }
   }
 
-  if (plan.program) validateProgram(plan.program, err, warn);
+  const many = Object.keys(plan.programs).length > 1;
+  for (const prog of Object.values(plan.programs)) validateProgram(prog, many ? `Program "${prog.id}": ` : '', err, warn);
   const supIds = new Set();
   for (const s of plan.supplements) {
     if (!s.id || !s.name) err('Every supplement needs an id and a name.');
@@ -137,13 +146,34 @@ export function validatePlan(input) {
   return { ok: errors.length === 0, errors, warnings, plan: errors.length ? null : plan };
 }
 
-function validateProgram(program, err, warn) {
+// `program` (the main one) and `programs` (more to choose from) become one map of
+// id -> program, each with an `id` and a short `label` for the picker. Never throws.
+function normalizePrograms(raw, err) {
+  const programs = {};
+  const add = (id, p) => {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return err(`Program "${String(id).slice(0, 30)}" is not a program.`);
+    if (!isSafeId(id)) return err(`Program id "${String(id).slice(0, 30)}" is not a valid id (use letters, numbers, - _ . and at most 64 characters).`);
+    if (programs[id]) return err(`Duplicate program id "${id}".`);
+    programs[id] = { ...p, id, label: String(p.label || p.name || id).slice(0, 40) };
+  };
+  if (raw.program) add(typeof raw.program?.id === 'string' ? raw.program.id : 'main', raw.program);
+  const more = raw.programs;
+  if (more != null) {
+    if (typeof more !== 'object' || Array.isArray(more)) err('programs must be an object of programs, keyed by id.');
+    else for (const [id, p] of Object.entries(more)) add(id, p);
+  }
+  const ids = Object.keys(programs);
+  const defaultId = typeof raw.defaultProgram === 'string' && Object.prototype.hasOwnProperty.call(programs, raw.defaultProgram) ? raw.defaultProgram : ids[0] || null;
+  return { programs, defaultId };
+}
+
+function validateProgram(program, where, err, warn) {
   const cycle = program.cycle;
-  if (!Array.isArray(cycle) || !cycle.length) return err('program.cycle must list the day keys in order.');
+  if (!Array.isArray(cycle) || !cycle.length) return err(`${where}program.cycle must list the day keys in order.`);
   for (const k of cycle) {
     const d = program.days?.[k];
-    if (!d) err(`program.days.${k} is missing.`);
-    else if (!['rest', 'lift'].includes(d.dayType)) err(`program.days.${k}.dayType must be "rest" or "lift".`);
+    if (!d) err(`${where}program.days.${k} is missing.`);
+    else if (!['rest', 'lift'].includes(d.dayType)) err(`${where}program.days.${k}.dayType must be "rest" or "lift".`);
   }
   for (const [eid, ed] of Object.entries(program.editions || {})) {
     for (const k of cycle) {
@@ -151,13 +181,13 @@ function validateProgram(program, err, warn) {
       if (day?.dayType === 'rest') continue;
       const exs = ed.days?.[k];
       if (!exs) {
-        warn(`Edition ${eid}: no exercises for "${k}".`);
+        warn(`${where}Edition ${eid}: no exercises for "${k}".`);
         continue;
       }
       const ids = new Set();
       for (const ex of exs) {
-        if (!ex.id || !ex.name) err(`Edition ${eid}/${k}: every exercise needs an id and a name.`);
-        if (ids.has(ex.id)) err(`Edition ${eid}/${k}: duplicate exercise id "${ex.id}".`);
+        if (!ex.id || !ex.name) err(`${where}Edition ${eid}/${k}: every exercise needs an id and a name.`);
+        if (ids.has(ex.id)) err(`${where}Edition ${eid}/${k}: duplicate exercise id "${ex.id}".`);
         ids.add(ex.id);
         if (!Array.isArray(ex.sets) || !ex.sets.length) err(`Exercise ${ex.id}: needs sets.`);
         for (const s of ex.sets || []) {
@@ -206,6 +236,15 @@ export function targetsOn(history, date, dayType) {
 
 export function programDays(plan) {
   return plan?.program?.cycle || [];
+}
+
+// The programs a plan offers, main one first.
+export const programList = (plan) => Object.values(plan?.programs || {});
+
+// A program may not offer the edition (gym / home) the person prefers; use its first one then.
+export function editionFor(program, preferred) {
+  const eds = Object.keys(program?.editions || {});
+  return program?.editions?.[preferred] ? preferred : eds[0] || null;
 }
 
 export function exercisesFor(plan, edition, dayKey) {

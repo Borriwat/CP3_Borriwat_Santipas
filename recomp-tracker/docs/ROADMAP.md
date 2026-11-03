@@ -13,6 +13,10 @@ effort. The first block is already built.
 - **Targets history** (old days keep old targets), calculator, and **menu resizing**.
 - **Photo logging with AI**: photo in, editable estimate out, logged as flagged
   estimates. Uses the person's own API key, stored only on the phone.
+- **Meal names** you can change per day or for good, and a **Start blank** mode that
+  keeps the targets but leaves the meals empty.
+- **Several training programs** (a picker between, say, PPL, ULU and FB3), with history
+  kept when you switch.
 - Supplements checklist, water, sleep, weekly-measurement tracking, strength trend.
 - **Shopping list** for the next 7 days, calendar **reminders**, backup/restore, dark mode.
 

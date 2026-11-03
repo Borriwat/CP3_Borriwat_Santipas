@@ -3,12 +3,13 @@ import { icon, ring, macroRow, macroLine, seg, chip, checkbox } from './componen
 import { ui, dayModel, mutate, openSheet, toast, supplementList, latestWeight, itemsMacros, todayISO, render } from './ctx.js';
 import { prettyDate, addDays, fromISO } from '../core/dates.js';
 import { DAY_TYPES, DAY_TYPE_SHORT } from '../core/tdee.js';
-import { TIMINGS } from '../core/plan.js';
+import { TIMINGS, editionFor } from '../core/plan.js';
 import { n0, n1, qtyText, signed, parseNum } from '../core/format.js';
 import { entryMacros, diff } from '../core/macros.js';
 import { rebalanceMeals } from '../core/scale.js';
 import { sessionVolume } from '../core/stats.js';
 import * as S from '../core/state.js';
+import { newPhoto } from './sheets-photo.js';
 
 const QLOW_REASONS = ['Big meal', 'Salty meal', 'Alcohol', 'Poor sleep', 'Period / cycle', 'Stress', 'Travel', 'Late meal'];
 
@@ -109,6 +110,11 @@ function rebalanceBanner(m) {
 const nameButton = (slot, label) =>
   html`<button type="button" class="name-btn" data-act="meal-rename" data-slot="${slot}" aria-label="Rename ${label}">${label}${icon('edit')}</button>`;
 
+// One tap from a meal to "take a photo and estimate it" (the Photo tab of Add food).
+// (an icon in the header when the bottom row is busy with "Log as planned", else a labelled button)
+const photoButton = (slot, compact) =>
+  html`<button class="btn ${compact ? 'sm ghost icon' : 'soft'}" data-act="add-photo" data-slot="${slot}" aria-label="Add food from a photo" title="Add food from a photo">${icon('camera')}${compact ? '' : ' Photo'}</button>`;
+
 const cooked = (f, qty) => (f?.cr ? html` <span class="muted">· ≈${n0(qty * f.cr)} g cooked</span>` : '');
 
 function mealCard(m, meal) {
@@ -122,6 +128,7 @@ function mealCard(m, meal) {
       <h3>${nameButton(meal.slot, meal.label)}</h3>
       <div class="row" style="gap:4px">
         ${logged ? html`<span class="pill ok">${icon('check')} Logged</span>` : meal.adjusted ? html`<span class="pill warn">Adjusted today</span>` : meal.items.length ? html`<span class="pill">Planned</span>` : html`<span class="pill">Empty</span>`}
+        ${canLog ? photoButton(meal.slot, true) : ''}
         <button class="btn sm ghost icon" data-act="ask-claude" data-slot="${meal.slot}" aria-label="Ask an AI about this meal" title="Ask an AI about this meal">${icon('sparkle')}</button>
         ${logged ? html`<button class="btn sm ghost icon" data-act="unlog-meal" data-slot="${meal.slot}" aria-label="Clear this meal" title="Clear this meal">${icon('trash')}</button>` : meal.adjusted ? html`<button class="btn sm ghost icon" data-act="reset-adjust" data-slot="${meal.slot}" aria-label="Reset to the original plan" title="Reset to the original plan">${icon('x')}</button>` : ''}
       </div>
@@ -145,6 +152,7 @@ function mealCard(m, meal) {
     <div class="row" style="margin-top:10px">
       ${canLog ? html`<button class="btn primary grow" data-act="log-planned" data-slot="${meal.slot}">${icon('check')} Log as planned</button>` : ''}
       <button class="btn ${canLog ? '' : 'soft grow'}" data-act="add-food" data-slot="${meal.slot}">${icon('plus')} Add food</button>
+      ${canLog ? '' : photoButton(meal.slot, false)}
     </div>
   </section>`;
 }
@@ -164,7 +172,7 @@ function extraCard(m) {
   return html`<section class="card" style="margin-top:12px">
     <div class="meal-title"><h3>${nameButton('extra', S.mealLabel(m.s, m.date, 'extra'))}</h3>${list.length ? html`<span class="pill">${n0(tot)} kcal</span>` : ''}</div>
     ${list.length ? html`<div class="list" style="margin-top:6px">${list.map((e) => entryRow(e, m.index))}</div>` : html`<p class="small muted" style="margin-top:4px">Anything outside your meals. It counts toward today.</p>`}
-    <div style="margin-top:10px"><button class="btn soft block" data-act="add-food" data-slot="extra">${icon('plus')} Add food or drink</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn soft grow" data-act="add-food" data-slot="extra">${icon('plus')} Add food or drink</button>${photoButton('extra', false)}</div>
   </section>`;
 }
 
@@ -204,9 +212,9 @@ function workoutCard(m) {
   const prog = m.plan.program;
   const w = m.day.workout;
   const key = w?.dayKey || m.programKey;
-  const def = prog.days[key];
+  const def = prog.days[key] || { label: w?.dayLabel || key, dayType: 'lift' }; // a workout from another program
   const idxOf = prog.cycle.indexOf(key) + 1;
-  const edition = w?.edition || m.s.prefs.edition;
+  const edition = w?.edition || editionFor(prog, m.s.prefs.edition);
   const exs = prog.editions[edition]?.days?.[key] || [];
   const sets = exs.reduce((a, e) => a + e.sets.length, 0);
   let body;
@@ -223,7 +231,7 @@ function workoutCard(m) {
     body = html`<p class="small muted">${exs.length} exercises · ${sets} sets${prog.editions[edition]?.label ? ' · ' + prog.editions[edition].label : ''}</p>
       <button class="btn primary block" style="margin-top:8px" data-act="goto-train">${icon('train')} Open workout</button>`;
   }
-  return html`<section class="card" style="margin-top:12px"><div class="meal-title"><h3>Training</h3><span class="pill">Day ${idxOf} · ${def.label}</span></div><div style="margin-top:6px">${body}</div></section>`;
+  return html`<section class="card" style="margin-top:12px"><div class="meal-title"><h3>Training</h3><span class="pill">${idxOf ? `Day ${idxOf} · ` : ''}${def.label}</span></div><div style="margin-top:6px">${body}</div></section>`;
 }
 
 function cardioCard(m) {
@@ -295,6 +303,7 @@ export const actions = {
   },
   'planned-item': (el) => openSheet('plannedItem', { slot: el.dataset.slot, i: Number(el.dataset.i), date: dayModel().date }),
   'entry-open': (el) => openSheet('entry', { id: el.dataset.id, date: dayModel().date, qty: null }),
+  'add-photo': (el) => openSheet('addFood', { slot: el.dataset.slot, date: dayModel().date, tab: 'photo', q: '', foodId: null, qty: '', photo: newPhoto() }),
   'add-food': (el) => openSheet('addFood', { slot: el.dataset.slot, date: dayModel().date, tab: 'search', q: '', foodId: null, qty: '' }),
   'ask-claude': (el) => openSheet('prompt', { slot: el.dataset.slot, date: dayModel().date }),
   'rebalance-open': () => openSheet('rebalance', { date: dayModel().date }),

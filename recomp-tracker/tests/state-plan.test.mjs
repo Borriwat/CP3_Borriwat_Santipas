@@ -165,7 +165,11 @@ test('workout lifecycle: start, log sets, finish, cancel', () => {
   assert.equal(w.finishedAt, 200);
   S.cancelWorkout(s, TODAY);
   assert.equal(s.days[TODAY].workout, null);
-  assert.equal(S.startWorkout(s, TODAY, 'push', 'nonexistent'), null);
+  // an edition the program does not offer (say "home" on a gym-only program) falls back to its first
+  const fallback = S.startWorkout(s, TODAY, 'push', 'nonexistent');
+  assert.equal(fallback.edition, 'gym');
+  S.cancelWorkout(s, TODAY);
+  assert.equal(S.startWorkout(s, TODAY, 'no-such-day', 'gym'), null, 'an unknown session still refuses to start');
 });
 
 test('measurements replace per date and stay sorted', () => {

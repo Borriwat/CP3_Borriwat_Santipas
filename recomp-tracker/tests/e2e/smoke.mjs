@@ -1196,6 +1196,155 @@ console.log('\nStart-blank meals');
   await ctx.close();
 }
 
+async function switchTo_via_more(page, label) {
+  await page.click('[data-act="tab"][data-v="more"]');
+  await page.click(`[data-act="program-pick"]:text-is("${label}")`);
+  await page.waitForSelector('[data-act="confirm-yes"]');
+  await page.click('[data-act="confirm-yes"]');
+  await page.waitForFunction(() => !document.querySelector('.sheet'));
+}
+
+console.log('\nTraining programs');
+{
+  const { ctx, page } = await newPage();
+  await loadExample(page);
+  const goTab = (t) => page.click(`[data-act="tab"][data-v="${t}"]`);
+  const pickerOn = (v) => page.locator(`[data-act="program-pick"][data-v="${v}"]`);
+  const switchTo = async (label) => {
+    await page.click(`[data-act="program-pick"]:text-is("${label}")`);
+    await page.waitForSelector('[data-act="confirm-yes"]');
+    await page.click('[data-act="confirm-yes"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+  };
+
+  await check('a plan with two programs shows a program picker in More and on Train, with the first one active', async () => {
+    await goTab('more');
+    ok(/Training program/.test(await page.locator('main').innerText()));
+    eq(await pickerOn('ppl').getAttribute('aria-pressed'), 'true');
+    eq(await pickerOn('fullbody').getAttribute('aria-pressed'), 'false');
+    await goTab('train');
+    eq(await page.locator('[data-act="program-pick"]').count(), 2);
+    ok(/PPL · Day 1 of 7/.test(await page.locator('.page-head').innerText()), await page.locator('.page-head').innerText());
+    eq(await page.locator('.page-head h1').innerText(), 'Push');
+  });
+
+  await check('switching asks first, then today becomes Day 1 of the other program', async () => {
+    await page.click('[data-act="program-pick"]:text-is("Full body")');
+    const msg = await page.locator('.sheet').innerText();
+    ok(/Switch to Full body\?/.test(msg) && /Day 1 \(Full body 1\)/.test(msg) && /history stay exactly as they are/.test(msg), msg);
+    await page.click('[data-act="confirm-no"]');
+    eq((await state(page)).prefs.programId, 'ppl', 'cancelling must change nothing');
+    await switchTo('Full body');
+    ok(/Now following Full body/.test(await page.locator('.toast').innerText()));
+    eq(await page.locator('.page-head h1').innerText(), 'Full body 1');
+    ok(/Full body · Day 1 of 7/.test(await page.locator('.page-head').innerText()));
+    eq(await page.locator('.list .item').count(), 4, 'its four exercises are listed');
+    ok(/Goblet squat/.test(await page.locator('main').innerText()));
+    const st = await state(page);
+    eq(st.prefs.programId, 'fullbody');
+    eq(st.plan.program.id, 'fullbody');
+  });
+
+  await check('its rest days show as rest, and Today shows the new program\'s session', async () => {
+    await goTab('today');
+    ok(/Day 1 · Full body 1/.test(await page.locator('main').innerText()));
+    eq(await page.locator('.seg.tight button[aria-pressed="true"]').first().innerText(), 'Lift');
+  });
+
+  await check('a workout started under one program still opens, and finishes, after you switch to another', async () => {
+    await switchTo_via_more(page, 'PPL');
+    await goTab('train');
+    await page.click('[data-act="workout-start"]');
+    await page.waitForSelector('.set-grid');
+    await page.click('[data-act="set-done"][data-ex="0"][data-set="1"]');
+    await goTab('more');
+    await switchTo('Full body');
+    await goTab('train');
+    await page.waitForSelector('.set-grid');
+    eq(await page.locator('.page-head h1').innerText(), 'Push', 'the workout keeps its own name');
+    eq(await page.locator('[data-act="program-pick"]').count(), 0, 'no picker in the middle of a workout');
+    await goTab('today');
+    ok(/In progress/.test(await page.locator('main').innerText()) && /Push/.test(await page.locator('main').innerText()));
+    await goTab('train');
+    await page.click('[data-act="workout-finish-open"]');
+    await page.click('[data-act="workout-finish"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    ok(/Push/.test(await page.locator('main').innerText()), 'the finished workout is listed under its own name');
+    const w = Object.values((await state(page)).days).find((d) => d.workout).workout;
+    eq(w.programId, 'ppl');
+    eq(w.dayLabel, 'Push');
+    ok(w.finishedAt);
+  });
+
+  await check('the program you chose survives a reload and is in a backup', async () => {
+    await page.waitForTimeout(600);
+    await page.reload();
+    await page.waitForSelector('.tabbar');
+    await goTab('more');
+    eq(await pickerOn('fullbody').getAttribute('aria-pressed'), 'true');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="backup-export"]')]);
+    const b = JSON.parse(await readFile(await dl.path(), 'utf8'));
+    eq(b.state.prefs.programId, 'fullbody');
+    eq(Object.keys(b.state.plan.programs).join(','), 'ppl,fullbody');
+  });
+
+  await check('a plan with a single program has no picker', async () => {
+    const p2 = await newPage();
+    await p2.page.goto(BASE);
+    await p2.page.click('[data-act="calc-welcome"]');
+    for (const [k, v] of [['age', '30'], ['heightCm', '178'], ['weightKg', '78'], ['bfPct', '18']]) await p2.page.fill(`input[data-input="calc-field"][data-k="${k}"]`, v);
+    await p2.page.click('[data-act="calc-create"]');
+    await p2.page.waitForSelector('.tabbar');
+    await p2.page.click('[data-act="tab"][data-v="more"]');
+    eq(await p2.page.locator('[data-act="program-pick"]').count(), 0);
+    await p2.ctx.close();
+  });
+
+  eq(page.errors.filter((e) => !/Failed to load resource|net::/.test(e)).length, 0, 'console errors: ' + page.errors.join('; '));
+  await ctx.close();
+}
+
+console.log('\nPhoto shortcut on meals');
+{
+  const KEY = 'sk-ant-api03-' + 'S'.repeat(40);
+  const { ctx, page } = await newPage();
+  await loadExample(page);
+  await check('every meal has a camera button that opens Add food on the Photo tab, for that meal', async () => {
+    eq(await page.locator('[data-act="add-photo"]').count(), 5, 'four meals plus Snacks');
+    await page.click('[data-key="meal-lunch"] [data-act="add-photo"]');
+    eq(await page.locator('.sheet-head h2').innerText(), 'Add to Lunch');
+    eq(await page.locator('[data-act="sheet-tab"][data-v="photo"]').getAttribute('aria-pressed'), 'true');
+    ok(/One-time setup/.test(await page.locator('.sheet').innerText()), 'with no key yet it explains the setup');
+    await page.click('.sheet-head [data-act="sheet-close"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+  });
+  await check('with a key saved, one tap goes straight to "Take or choose a photo"', async () => {
+    await page.evaluate((k) => localStorage.setItem('recomp-tracker:ai-key', k), KEY);
+    await page.click('[data-key="meal-dinner"] [data-act="add-photo"]');
+    await page.waitForSelector('input[data-change="photo-file"]', { state: 'attached' });
+    eq(await page.locator('.sheet-head h2').innerText(), 'Add to Dinner');
+    ok(/Take or choose a photo/.test(await page.locator('.sheet').innerText()));
+    await page.click('.sheet-head [data-act="sheet-close"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+  });
+  await check('the Snacks card has one too, and "Log as planned" is not squeezed onto two lines', async () => {
+    await page.click('[data-act="add-photo"][data-slot="extra"]');
+    eq(await page.locator('.sheet-head h2').innerText(), 'Add to Snacks / other');
+    await page.click('.sheet-head [data-act="sheet-close"]');
+    await page.waitForFunction(() => !document.querySelector('.sheet'));
+    const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    ok(over <= 1, `page is ${over}px too wide`);
+    const lines = await page.locator('[data-key="meal-lunch"] [data-act="log-planned"]').evaluate((btn) => {
+      const r = document.createRange();
+      r.selectNodeContents(btn.lastChild); // the text "Log as planned"
+      return r.getClientRects().length;
+    });
+    eq(lines, 1, 'the button text wrapped');
+  });
+  eq(page.errors.filter((e) => !/Failed to load resource|net::/.test(e)).length, 0, 'console errors: ' + page.errors.join('; '));
+  await ctx.close();
+}
+
 console.log('\nOffline & PWA');
 {
   const { ctx, page } = await newPage({ serviceWorkers: 'allow' });
