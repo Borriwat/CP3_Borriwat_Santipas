@@ -2,7 +2,7 @@
 // view-model for a day.
 
 import { buildFoodIndex } from '../core/foods.js';
-import { getDay, mealLabel } from '../core/state.js';
+import { getDay, mealLabel, usesPlannedMeals } from '../core/state.js';
 import { resolveDayType, programDayKey } from '../core/schedule.js';
 import { targetsOn, menuSlotItems, slotsFor } from '../core/plan.js';
 import { dayTotals } from '../core/stats.js';
@@ -106,15 +106,17 @@ export function dayModel(date = viewDate()) {
 export function mealModel(s, date, type, slot, index) {
   const day = s.days[date];
   const entries = (day?.entries || []).filter((e) => e.slot === slot);
-  const items = plannedItems(s, date, type, slot);
+  // In 'blank' mode the meal has no planned foods at all; targets are unaffected.
+  const blank = !usesPlannedMeals(s);
+  const items = blank ? [] : plannedItems(s, date, type, slot);
   const planned = itemsMacros(items, index);
-  const template = menuSlotItems(s.plan, s.prefs.menu, type, slot);
+  const template = blank ? [] : menuSlotItems(s.plan, s.prefs.menu, type, slot);
   return {
     slot,
     label: mealLabel(s, date, slot),
     items,
     planned,
-    adjusted: !!day?.adjust?.[slot],
+    adjusted: !blank && !!day?.adjust?.[slot],
     template,
     entries,
     logged: sumMacros(entries.map(entryMacros)),

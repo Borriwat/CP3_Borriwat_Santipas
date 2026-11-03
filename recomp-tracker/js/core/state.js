@@ -5,7 +5,7 @@ import { makeEntry, newId, round } from './macros.js';
 import { anchorForDay } from './schedule.js';
 import { DAY_TYPES } from './tdee.js';
 import { normalizeFood } from './foods.js';
-import { slotLabel } from './plan.js';
+import { slotLabel, editionFor } from './plan.js';
 
 export const STATE_VERSION = 1;
 
@@ -22,10 +22,12 @@ export function defaultState(today) {
       waterGoalMl: 3000,
       supplementIds: null,
       programAnchor: today,
+      programId: null, // which of the plan's training programs is active
       tolerance: { kcal: 150, p: 10, avgBias: 100 },
       weighTime: '07:00',
       sex: 'M',
       mealNames: {}, // slot -> name, for every day
+      mealMode: 'planned', // 'planned': Today shows the plan's menu. 'blank': every meal starts empty
     },
     days: {},
     measurements: [],
@@ -67,8 +69,10 @@ export function applyPlan(state, plan, today) {
   else state.targetHistory = [{ from: '1970-01-01', targets: targetsFromPlan(plan) }];
   const menuIds = Object.keys(plan.menus || {});
   state.prefs.menu = menuIds.includes(state.prefs.menu) ? state.prefs.menu : menuIds[0] || null;
-  const editions = Object.keys(plan.program?.editions || {});
-  state.prefs.edition = editions.includes(state.prefs.edition) ? state.prefs.edition : editions[0] || null;
+  syncProgram(state);
+  // keep the preferred edition if any of the programs offers it (a program without it uses its own first)
+  const editions = [...new Set(Object.values(plan.programs || {}).flatMap((p) => Object.keys(p.editions || {})))];
+  state.prefs.edition = editions.includes(state.prefs.edition) ? state.prefs.edition : Object.keys(plan.program?.editions || {})[0] || editions[0] || null;
   state.prefs.supplementIds = plan.supplements.filter((s) => s.base).map((s) => s.id);
   state.prefs.waterGoalMl = plan.hydration?.goalMl || 3000;
   state.prefs.programAnchor = state.prefs.programAnchor || today;
@@ -88,9 +92,54 @@ export function setTargets(state, from, targets) {
   state.targetHistory.sort((a, b) => (a.from < b.from ? -1 : 1));
 }
 
+// Which training program is active. `plan.program` always points at it, so the rest of
+// the app simply reads plan.program. Also upgrades data saved before a plan could hold
+// several programs. Safe on damaged data: it never throws.
+export function syncProgram(state) {
+  const plan = state?.plan;
+  if (!plan || typeof plan !== 'object') return;
+  const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  if (!isObj(plan.programs)) {
+    plan.programs = isObj(plan.program) ? { main: { ...plan.program, id: 'main', label: String(plan.program.label || plan.program.name || 'Main').slice(0, 40) } } : {};
+    plan.defaultProgram = isObj(plan.program) ? 'main' : null;
+  }
+  for (const [id, p] of Object.entries(plan.programs)) if (!isObj(p)) delete plan.programs[id];
+  const has = (id) => typeof id === 'string' && Object.prototype.hasOwnProperty.call(plan.programs, id); // not "__proto__" and friends
+  const ids = Object.keys(plan.programs);
+  if (!ids.length) {
+    plan.program = null;
+    state.prefs.programId = null;
+    return;
+  }
+  const want = has(state.prefs.programId) ? state.prefs.programId : has(plan.defaultProgram) ? plan.defaultProgram : ids[0];
+  state.prefs.programId = want;
+  plan.program = plan.programs[want];
+}
+
+// Follow a different program. Today becomes its Day 1; logged workouts are untouched.
+export function setProgram(state, today, id) {
+  const programs = state.plan?.programs;
+  if (!programs || typeof id !== 'string' || !Object.prototype.hasOwnProperty.call(programs, id) || state.plan.program?.id === id) return false;
+  state.prefs.programId = id;
+  state.prefs.programAnchor = today;
+  syncProgram(state);
+  return true;
+}
+
 export function setProgramDay(state, today, n) {
   const len = state.plan?.program?.cycle?.length;
   if (len) state.prefs.programAnchor = anchorForDay(today, n, len);
+}
+
+// ---- Meal mode -------------------------------------------------------------
+// 'blank' hides the planned foods on Today so meals start empty and the person
+// logs their own food. Nothing is deleted (the plan and its menus stay in the
+// app) and the daily targets are exactly the same in both modes.
+
+export const MEAL_MODES = ['planned', 'blank'];
+export const usesPlannedMeals = (state) => state.prefs.mealMode !== 'blank';
+export function setMealMode(state, mode) {
+  state.prefs.mealMode = MEAL_MODES.includes(mode) ? mode : 'planned';
 }
 
 // ---- Meal names ------------------------------------------------------------
@@ -256,12 +305,16 @@ export const setNotes = (state, date, text) => {
 // ---- Workouts ---------------------------------------------------------------
 
 export function startWorkout(state, date, dayKey, edition, now = Date.now()) {
-  const exercises = state.plan?.program?.editions?.[edition]?.days?.[dayKey];
+  const program = state.plan?.program;
+  const ed = editionFor(program, edition);
+  const exercises = program?.editions?.[ed]?.days?.[dayKey];
   if (!exercises) return null;
   const d = ensureDay(state, date);
   d.workout = {
     dayKey,
-    edition,
+    edition: ed,
+    programId: program.id || null,
+    dayLabel: String(program.days?.[dayKey]?.label || dayKey),
     startedAt: now,
     finishedAt: null,
     burnKcal: null,
@@ -355,6 +408,8 @@ export function parseBackup(text, today) {
   merged.days = s.days && typeof s.days === 'object' ? s.days : {};
   for (const k of Object.keys(merged.days)) merged.days[k] = { ...blankDay(), ...merged.days[k], mealNames: cleanMealNames(merged.days[k]?.mealNames) };
   merged.prefs.mealNames = cleanMealNames(merged.prefs.mealNames);
+  syncProgram(merged);
+  if (!MEAL_MODES.includes(merged.prefs.mealMode)) merged.prefs.mealMode = 'planned';
   for (const k of ['measurements', 'customFoods', 'reviews', 'targetHistory']) if (!Array.isArray(merged[k])) merged[k] = [];
   merged.v = STATE_VERSION;
   return { ok: true, state: merged };

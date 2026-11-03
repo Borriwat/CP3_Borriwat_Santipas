@@ -5,7 +5,7 @@ import { searchFoods, sortRecent } from '../core/foods.js';
 import { foodMacros, macros, kcalOf, entryMacros, diff, round, sumMacros } from '../core/macros.js';
 import { swapFood, suggestSwaps } from '../core/swap.js';
 import { rebalanceMeals } from '../core/scale.js';
-import { mealLabel } from '../core/state.js';
+import { mealLabel, usesPlannedMeals } from '../core/state.js';
 import { offPlanPrompt } from '../core/prompts.js';
 import { n0, n1, qtyText, signed, parseNum } from '../core/format.js';
 import { photoTab } from './sheets-photo.js';
@@ -254,6 +254,7 @@ export function promptSheet(sh) {
       eaten,
       remaining,
       upcoming,
+      blank: !usesPlannedMeals(m.s),
     });
   }
   return {

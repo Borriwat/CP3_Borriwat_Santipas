@@ -2,14 +2,14 @@ import { html } from './dom.js';
 import { icon, seg, banner } from './components.js';
 import { ui, mutate, openSheet, toast, getStore, todayISO, latestWeight } from './ctx.js';
 import { DAY_TYPES, DAY_TYPE_LABEL } from '../core/tdee.js';
-import { targetsOn } from '../core/plan.js';
-import { exportState, parseBackup, defaultState } from '../core/state.js';
+import { targetsOn, programList } from '../core/plan.js';
+import { exportState, parseBackup, defaultState, setMealMode, usesPlannedMeals, setProgram } from '../core/state.js';
 import { buildReminders } from '../core/ics.js';
 import { programDayKey, cycleIndex } from '../core/schedule.js';
 import { n0, n1, parseNum } from '../core/format.js';
 import { aiSettingsCard, keys } from './sheets-photo.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.4.0';
 const state = () => getStore().state;
 
 export function renderMore() {
@@ -21,6 +21,7 @@ export function renderMore() {
   const editions = Object.entries(plan.program?.editions || {});
   const rem = { weigh: '07:00', log: '21:00', measure: '08:00', review: '09:00', ...(s.prefs.reminders || {}) };
   const prog = plan.program;
+  const programs = programList(plan);
   const dayNo = prog ? cycleIndex(today, s.prefs.programAnchor, prog.cycle.length) + 1 : null;
 
   return html`<main class="screen"><div class="page-head"><h1>More</h1></div><div class="stack">
@@ -30,7 +31,10 @@ export function renderMore() {
     <section class="card"><div class="card-head"><h2>My plan</h2><span class="pill">${plan.phase}</span></div>
       <div class="bold">${plan.name}</div>${plan.source ? html`<div class="tiny muted">${plan.source}</div>` : ''}
       <div class="stack" style="margin-top:12px">
+        ${menuIds.length ? html`<div class="field"><span class="small muted bold">Meals on Today</span>${seg('meal-mode', [['planned', 'Planned menu'], ['blank', 'Start blank']], usesPlannedMeals(s) ? 'planned' : 'blank')}
+          <div class="tiny muted" style="margin-top:4px">${usesPlannedMeals(s) ? 'Meals come pre-filled from your menu. Choose “Start blank” to log your own food instead.' : 'Meals start empty and you log your own food. Your daily targets stay exactly the same, and your menu is kept on the Plan tab for reference.'}</div></div>` : ''}
         ${menuIds.length > 1 ? html`<div class="field"><span class="small muted bold">Meal menu</span>${seg('plan-menu', menuIds.map((id) => [id, plan.menus[id].label]), s.prefs.menu)}</div>` : ''}
+        ${programs.length > 1 ? html`<div class="field"><span class="small muted bold">Training program</span>${seg('program-pick', programs.map((p) => [p.id, p.label]), prog?.id)}</div>` : ''}
         ${editions.length > 1 ? html`<div class="field"><span class="small muted bold">Training edition</span>${seg('set-edition', editions.map(([k, v]) => [k, v.label]), s.prefs.edition)}</div>` : ''}
         ${prog ? html`<div class="row between"><div><div class="bold">Program schedule</div><div class="small muted">Today is Day ${dayNo} · ${prog.days[programDayKey(plan, today, s.prefs.programAnchor)].label}</div></div><button class="btn sm" data-act="program-open">Change</button></div>` : ''}
         <button class="btn block" data-act="plan-import-open">${icon('upload')} Import a different plan</button>
@@ -103,6 +107,22 @@ export const actions = {
       },
     });
   },
+  'program-pick': (el) => {
+    const s = state();
+    const p = s.plan.programs?.[el.dataset.v];
+    if (!p || p.id === s.plan.program?.id) return;
+    openSheet('confirm', {
+      title: `Switch to ${p.label}?`,
+      message: `${p.label} starts today as Day 1 (${p.days[p.cycle[0]]?.label || 'first day'}). Your logged workouts and history stay exactly as they are, and you can move to another day or pick a different session any time from the Train tab.`,
+      label: 'Switch program',
+      danger: false,
+      onYes: () => {
+        mutate((st) => setProgram(st, todayISO(), p.id));
+        toast(`Now following ${p.label}`);
+      },
+    });
+  },
+  'meal-mode': (el) => mutate((s) => setMealMode(s, el.dataset.v)),
   'food-del': (el) => mutate((s) => { s.customFoods = s.customFoods.filter((f) => f.id !== el.dataset.id); }),
   theme: (el) => mutate((s) => { s.prefs.theme = el.dataset.v; }),
   'sound-toggle': () => mutate((s) => { s.prefs.sound = s.prefs.sound === false; }),

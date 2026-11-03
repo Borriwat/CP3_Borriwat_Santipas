@@ -86,6 +86,28 @@ const gym = {
   ],
 };
 
+// A second, simpler program so the program picker has something to switch to.
+const FULLBODY = {
+  fb1: [
+    { id: 'fb1-goblet-squat', name: 'Goblet squat', rest: 90, restAfter: 180, sets: compound(3) },
+    { id: 'fb1-incline-db-press', name: 'Incline dumbbell press', rest: 90, restAfter: 180, sets: [['warm', 12], ['w15', 12], ['w1', 12], ['fail', 12]] },
+    { id: 'fb1-lat-pulldown', name: 'Lat pulldown', rest: 90, restAfter: 120, sets: [['warm', 12], ['w15', 12], ['w1', 12], ['fail', 12]] },
+    { id: 'fb1-cable-curl', name: 'Cable curl', rest: 60, restAfter: 0, sets: iso() },
+  ],
+  fb2: [
+    { id: 'fb2-rdl', name: 'Romanian deadlift', rest: 90, restAfter: 180, sets: compound(3) },
+    { id: 'fb2-flat-db-press', name: 'Flat dumbbell press', rest: 90, restAfter: 180, sets: [['warm', 12], ['w15', 12], ['w1', 12], ['fail', 12]] },
+    { id: 'fb2-seated-row', name: 'Seated cable row', rest: 90, restAfter: 120, sets: [['warm', 12], ['w15', 12], ['w1', 12], ['fail', 12]] },
+    { id: 'fb2-pushdown', name: 'Cable triceps pushdown', rest: 60, restAfter: 0, sets: iso() },
+  ],
+  fb3: [
+    { id: 'fb3-leg-press', name: 'Leg press', rest: 90, restAfter: 180, sets: compound(3) },
+    { id: 'fb3-shoulder-press', name: 'Dumbbell shoulder press', rest: 90, restAfter: 180, sets: [['warm', 12], ['w15', 12], ['w1', 12], ['fail', 12]] },
+    { id: 'fb3-chest-supported-row', name: 'Chest-supported row', rest: 90, restAfter: 120, sets: [['warm', 12], ['w15', 12], ['w1', 12], ['fail', 12]] },
+    { id: 'fb3-lateral-raise', name: 'Dumbbell lateral raise', rest: 60, restAfter: 0, sets: [['fail', 20], ['drop', 10], ['fail', 20], ['drop', 10]] },
+  ],
+};
+
 const SUPPLEMENTS = [
   { id: 'creatine', name: 'Creatine monohydrate', dose: '5 g', timing: 'morning', base: true, note: 'Every day, no cycling needed. Example entry.' },
   { id: 'vitamin-d3', name: 'Vitamin D3', dose: '1 capsule', timing: 'morning', base: true, note: 'With a meal that has some fat. Example entry.' },
@@ -147,10 +169,29 @@ export function buildExamplePlan() {
     foods: [],
     menus,
     program: {
+      id: 'ppl',
+      label: 'PPL',
       name: 'Push / Pull / Legs / Rest / Upper / Lower / Rest',
       cycle: Object.keys(dayDefs),
       days: dayDefs,
       editions: { gym: { label: 'Gym', days: gym } },
+    },
+    programs: {
+      fullbody: {
+        label: 'Full body',
+        name: 'Full body 3 days a week',
+        cycle: ['fb1', 'rest1', 'fb2', 'rest2', 'fb3', 'rest3', 'rest4'],
+        days: {
+          fb1: { label: 'Full body 1', dayType: 'lift' },
+          rest1: { label: 'Rest', dayType: 'rest' },
+          fb2: { label: 'Full body 2', dayType: 'lift' },
+          rest2: { label: 'Rest', dayType: 'rest' },
+          fb3: { label: 'Full body 3', dayType: 'lift' },
+          rest3: { label: 'Rest', dayType: 'rest' },
+          rest4: { label: 'Rest', dayType: 'rest' },
+        },
+        editions: { gym: { label: 'Gym', days: FULLBODY } },
+      },
     },
     supplements: SUPPLEMENTS,
     cardio: { weeklyKcalGoal: 0, met: 8 },
